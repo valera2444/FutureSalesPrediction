@@ -34,39 +34,37 @@ def create_lag_table_general(data,column='item_cnt_monthitem_id_lag_1',
     #to make whole same format as data, we need to whole['date_block_num']-=1
     start = time.time()
 
-    whole=whole.copy()
-    new_table = data.copy()
+    whole=whole[['shop_id','item_id','date_block_num',column]]
+    #new_table = data.copy()
     if 'lag' in column:
         whole['date_block_num'] -= 1
         whole = whole[whole['date_block_num'] >= 0]
 
     
-    groped_item = whole.groupby(['date_block_num',*groupby])[column].unique()
-    
-    print(groped_item.map(lambda a:a[0]).describe())
 
-    print(whole.date_block_num)
+    #print(whole.date_block_num)
     agg = 'mean'
     df = pd.pivot_table(whole, 
-                    index=groupby,
+                    index=['shop_id','item_id'],
                     columns=['date_block_num'],
                     values=[column],
                     aggfunc=agg, 
                     fill_value=0
                    ).reset_index()
 
-    train = pd.DataFrame({col:df[col] for col in groupby})
+    train = pd.DataFrame({col:df[col] for col in ['shop_id','item_id']})
     
     col = df[column]
-    
+    del df
+    gc.collect()
     train = pd.concat([train,col], axis=1)
 
-    numerical = [col for col in new_table.columns if isinstance(col, int)]
+    numerical = [col for col in train.columns if isinstance(col, int)]
     numerical = [col for col in numerical if col < 34]
-    new_table = item_shop_city_category_sup_category.merge(train, how='left').fillna(0)
-    new_table = new_table[['shop_id','item_id', *numerical]]
-    print(new_table)
-    return new_table
+    train = item_shop_city_category_sup_category.merge(train, how='left').fillna(0)
+    train = train[['shop_id','item_id', *numerical]]
+    print(train)
+    return train
 
 
 def create_item_shop_data(data, column='item_cnt_day'):
@@ -111,6 +109,7 @@ def write_file_by_name(merged,column=None, whole=None, groupby='', shop_city=Non
                                                item_shop_city_category_sup_category=item_shop_city_category_sup_category)
     
     table_ema6_item.to_csv(f'data/{column}.csv', index=False)
+    #print(table_ema6_item.columns)
     del table_ema6_item
     gc.collect()
 
@@ -178,12 +177,12 @@ def merge_boosting(merged):
         return df0
     
     names_boosting =['ema_6_item_cnt_month_item_id',
-                     'ema_6_item_cnt_month_item_category_id_cat_city',
+                     #'ema_6_item_cnt_month_item_category_id_cat_city',
                      'ema_6_item_cnt_month_item_category_id_cat_shop_id',
                      'date_block_num_diff',
                      'avg_item_priceitem_id_lag_1',
                      'item_cnt_monthitem_category_id_cat_lag_1',
-                     'item_cnt_month_lag_1',
+                     'item_cnt_monthitem_id_lag_1',
                      #'avg_item_price',
                      'item_price_change']
     
@@ -271,7 +270,7 @@ def prepare_files(merged, whole,shop_city,category_super_category):
                         )
     
     write_file_by_name(merged,
-                       column='item_cnt_month_lag_1',
+                       column='item_cnt_monthitem_id_lag_1',
                          whole=whole, 
                          groupby=['item_id'],
                          shop_city=shop_city,
@@ -300,7 +299,7 @@ def prepare_files(merged, whole,shop_city,category_super_category):
     gc.collect()
     
     
-    table_item_cnt = pd.read_csv('data/item_cnt_month_lag_1.csv')
+    table_item_cnt = pd.read_csv('data/item_cnt_monthitem_id_lag_1.csv')
     cnt_changes_items = create_change(table_item_cnt)
     cnt_changes_items.to_csv('data/cnt_changes_items.csv', index=False)
     del cnt_changes_items
@@ -339,8 +338,8 @@ if __name__ == '__main__':
     merged['city'] = merged['city'].map(lambda a:a[0])
     merged['super_category'] = merged['super_category'].map(lambda a:a[0])
 
-    prepare_for_boosting=False
-
+    prepare_for_boosting=True
+    
     if prepare_for_boosting:
         merge_boosting(merged)
 

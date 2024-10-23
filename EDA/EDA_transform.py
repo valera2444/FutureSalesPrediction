@@ -144,14 +144,14 @@ def calculate_ema_6(df, min_periods=3, target='item_cnt_month', columns=None, te
 
     # Calculate weighted sums and weights
     weighted_sums = np.dot(df_in[lag_cols].values, weights)
-    valid_weights = (df_in[lag_cols] != 0).values.dot(weights)
+    #valid_weights = (df_in[lag_cols] != 0).values.dot(weights)
 
     # Avoid division by zero
-    print(valid_weights)
-    valid_weights[valid_weights == 0] = np.nan
+    #print(valid_weights)
+    #valid_weights[valid_weights == 0] = np.nan
 
     # Calculate EMA
-    df[f'ema_6_{target}_{'_'.join(columns[1:])}'] = weighted_sums / valid_weights
+    df[f'ema_6_{target}_{'_'.join(columns[1:])}'] = weighted_sums / sum(weights)
     df[f'ema_6_{target}_{'_'.join(columns[1:])}']=df[f'ema_6_{target}_{'_'.join(columns[1:])}'].fillna(0)
     return df
 
@@ -246,7 +246,7 @@ def transform(data_train, item_categories,items,shops, test_included=True ):
     merged=merged.rename(columns={'item_price':'avg_item_price','item_cnt_day':'item_cnt_month'})
     
     
-    ALPHA = 0.12
+    ALPHA = 0.0
     merged['shop_id_cat'] = merged['shop_id'].astype(np.uint8)
     merged['item_id_cat'] = merged['item_id'].astype(np.uint16)
     merged['item_category_id_cat'] = merged['item_category_id'].astype(np.uint8)

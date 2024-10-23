@@ -233,20 +233,21 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
 
         name = l[0]
         num = int(l[1])
+        
         #if 'change' in name:
         #    continue
         
         #if 'ema' in name:
         #    continue
-            
+        
         if 'ema_6_item_cnt_month_item_category_id_cat_city' in name:
-           if num == 1:
+           if num <= 3:
                 cols.append(col)
                 continue
             
        
         if 'ema_6_item_cnt_month_item_id_shop_id' in name:
-            if num == 1:
+            if num <= 3:
                 cols.append(col)
                 continue
             
@@ -266,13 +267,14 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
             continue
                 
         if 'ema' in name:
-            if num <= 1:
+            if num <= 3:
                 cols.append(col)
                 continue
 
             continue
                
         if 'price' in name:
+            continue
             if num <= 3:
                 cols.append(col)
                 continue
@@ -280,9 +282,9 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
             continue
         
         if 'shop_item_cnt' in name:
-           # if num <=6 or num == 12:
-           cols.append(col)
-            #    continue
+            if num <=6 or num == 12:
+                cols.append(col)
+                continue
         
     
     
@@ -478,7 +480,7 @@ def validate_ML(merged, model,batch_size,start_val_month, shop_item_pairs_in_dbn
         #dump_list = model.get_booster().get_dump()
         #num_trees = len(dump_list)
         
-        print('n_estimators:', model.n_estimators_)
+        #print('n_estimators:', model.n_estimators_)
         val_pred, val_error = validate_model(model,merged,batch_size, val_month,columns_order, shop_item_pairs_in_dbn)
         
         val_errors.append(val_error)
@@ -579,13 +581,13 @@ if __name__ == '__main__':
     
     merged = pd.concat(l)
     start_val_month=22
-    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=256, n_estimators = 100,  learning_rate=0.005)
+    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 100,  learning_rate=0.005)
     #model =RandomForestRegressor(max_depth = 11, n_estimators = 150,n_jobs=8)
     batch_size=100000
-    create_submission=False
+    is_create_submission=False
 
 
-    if create_submission:
+    if is_create_submission:
 
         submission = create_submission_pipeline(merged=merged, 
                                             model=model,
@@ -594,6 +596,7 @@ if __name__ == '__main__':
                                             shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn
                                             )
         submission.to_csv('submission.csv', index=False)
+        print(submission.describe())
 
     else:
 
