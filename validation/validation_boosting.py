@@ -73,7 +73,7 @@ def prepare_past_ID_s_CARTESIAN(data_train):
         if block == 0:
             continue
         arr = np.append(shop_item_pairs_WITH_PREV_in_dbn[block - 1],
-                             cartesians[block - 1], axis=0)
+                             cartesians[block - 1], axis=0)#shop_item_pairs_WITH_PREV_in_dbn doesnt contain 34 month
         
         shop_item_pairs_WITH_PREV_in_dbn[block] = np.unique(arr, axis=0)
         print(len(shop_item_pairs_WITH_PREV_in_dbn[block]))
@@ -106,7 +106,7 @@ def prepare_train(data, valid ):
     valid_shop_item = valid
     valid_shop_item = list(zip(*valid_shop_item))
     df = pd.DataFrame({'item_id':valid_shop_item[1],'shop_id':valid_shop_item[0]} )
-    data = df.merge(data, on=['shop_id','item_id'], how='left').fillna(0)
+    data = df.merge(data, on=['shop_id','item_id'], how='inner').fillna(0)
 
     return data
 
@@ -117,7 +117,8 @@ def prepare_val(data, valid ):
     """
     
     df = pd.DataFrame({'item_id':valid[:,1],'shop_id':valid[:,0]} )
-    data = df.merge(data, on=['shop_id','item_id'], how='left').fillna(0)
+    data = df.merge(data, on=['shop_id','item_id'], how='inner').fillna(0)
+    #print('prepare_val, data:',len(data))
     return data
 
 def prepare_data_train_boosting(data, valid, dbn):
@@ -143,7 +144,7 @@ def prepare_data_train_boosting(data, valid, dbn):
 
     #print(lag_cols)
     X = train[lag_cols]
-    Y = train[f'shop_item_cnt${dbn-1}']
+    Y = train[f'value_shop_id_item_id${dbn-1}']
     
     return X, Y
 
@@ -171,52 +172,80 @@ def prepare_data_validation_boosting(data, valid, dbn):
                 lag_cols.append(col)
 
     X = test[lag_cols]
-    Y = test[f'shop_item_cnt${dbn}']
+    Y = test[f'value_shop_id_item_id${dbn}']#value_shop_id_item_id
     
     return X, Y
 
-def create_batch_train(merged, batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn):
+def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_size_to_read):
     """
     
     """
-    #merged = pd.read_csv('data/merged.csv', chunksize=500000)
-    #merged = pd.read_csv('data/merged.csv')
-    train = np.random.permutation (shop_item_pairs_WITH_PREV_in_dbn[dbn])
-    chunck_num = (len(train)  // batch_size) if batch_size <= len(train) else 1         #All batches must have the same size.
     
-    for idx in range(chunck_num):#split shop_item_pairs_WITH_PREV_in_dbn into chuncks
-        #for chunck in merged:#split merged into chuncks
-        train_ret = prepare_data_train_boosting(merged,train[idx*batch_size:(idx+1)*batch_size], dbn)
-       
-        if  train_ret[0].empty:
-            yield [None, None]
+    
+    
+    train = np.random.permutation (shop_item_pairs_WITH_PREV_in_dbn[dbn-1])
+
+    chunk_num =  len(train)// batch_size if len(train)%batch_size==0  else   len(train) // batch_size + 1#MAY BE NEED TO CORRECT
+    
+    for idx in range(chunk_num):#split shop_item_pairs_WITH_PREV_in_dbn into chuncks
+        l_x=[]
+        l_y=[]
+        merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read)
+        l_sum = 0
+        for chunck in merged:#split merged into chuncks
+            
+            l =  prepare_data_train_boosting(chunck,train[idx*batch_size:(idx+1)*batch_size], dbn) 
+            #print(len(l[0]))
+            l_sum += len(l[0])
+            l_x.append( l[0] )
+            l_y. append(l[1])
         
-        yield train_ret#, test
+        if len(l_x) == 0:
+            yield [None, None]
+        print('create_batch_train, 203:',l_sum)
+        l_x = pd.concat(l_x)
+        l_y = pd.concat(l_y)
 
-def create_batch_val(merged, batch_size, dbn, shop_item_pairs_in_dbn):
+        
+        yield [l_x, l_y]#, test
+
+def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read):
     """
     
     """
-    #merged = pd.read_csv('data/merged.csv', chunksize=500000) - (DOESNT WORK PROPERLY))))) - use it if merged doesnt fit memory
-    #merged = pd.read_csv('data/merged.csv')
+    
     val = shop_item_pairs_in_dbn[dbn]
-
+    
     shops = np.unique(list(zip(*val))[0])
     items = np.unique(list(zip(*val))[1])
 
     cartesian_product = np.random.permutation (np.array(np.meshgrid(shops, items)).T.reshape(-1, 2))
     
-    chunck_num = (len(cartesian_product)  // batch_size) + 1
-    for idx in range(chunck_num):
-        #for chunck in merged:
-        train_ret = prepare_data_validation_boosting(merged,cartesian_product[idx*batch_size:(idx+1)*batch_size], dbn)
-        #When in batches idx no elements that are in (shop, item) in batch of merged
-        if  train_ret[0].empty:
+    chunk_num =  len(cartesian_product)// batch_size if len(cartesian_product)%batch_size==0  else   len(cartesian_product) // batch_size + 1#MAY BE NEED TO CORRECT
+    for idx in range(chunk_num):
+        merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read)
+        l_x=[]
+        l_y=[]
+        l_sum=0
+        cartesian = cartesian_product[idx*batch_size:(idx+1)*batch_size]
+
+        for chunck in merged:
+            #print('chunck',len(chunck))
+            #print('cartesian_product',len(cartesian))
             
+            l =  prepare_data_validation_boosting(chunck,cartesian, dbn) 
+            l_sum+=len(l[0])
+            l_x.append( l[0] )
+            l_y. append( l[1] )
+
+        if len(l_x) == 0:
             yield [None, None]
-        #print(len(train_ret))
-        
-        yield train_ret#, test
+        print('create_batch_val,243:',l_sum)
+        l_x = pd.concat(l_x)
+        l_y = pd.concat(l_y)
+
+
+        yield [l_x,l_y]#, test
 
 
 def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_columns(X_train,dbn) - to comment
@@ -272,7 +301,7 @@ def append_some_columns(X_train, dbn):
     X_train['month'] = dbn%12
     return X_train
 
-def train_model(model, merged,batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn):
+def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
     
     first=True
     rmse = 0
@@ -281,8 +310,12 @@ def train_model(model, merged,batch_size, val_month, shop_item_pairs_WITH_PREV_i
     
     Y_true_l = []
     preds_l = []
-    for X_train,Y_train  in create_batch_train(merged,batch_size, val_month,shop_item_pairs_WITH_PREV_in_dbn):
-        
+    for X_train,Y_train  in create_batch_train(batch_size, val_month,shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
+
+        if X_train is None:
+            print('None')
+            continue
+
         if type(model) in [Lasso,SVC]:
             #print(X_train.columns)
             X_train.drop('shop_id', inplace=True, axis=1) 
@@ -299,9 +332,7 @@ def train_model(model, merged,batch_size, val_month, shop_item_pairs_WITH_PREV_i
             
             pass
            
-        if X_train is None:
-            print('None')
-            continue
+        
             
         Y_train = np.clip(Y_train,0,20)
         
@@ -360,7 +391,7 @@ def train_model(model, merged,batch_size, val_month, shop_item_pairs_WITH_PREV_i
 
     return model, columns_order
 
-def validate_model(model,merged,batch_size, val_month, columns_order, shop_item_pairs_in_dbn):
+def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_in_dbn, batch_size_to_read):
     rmse = 0
     c=0
     
@@ -369,8 +400,10 @@ def validate_model(model,merged,batch_size, val_month, columns_order, shop_item_
     preds_l = []
     #create_batch_train(merged,batch_size, val_month) - return train set, where Y_val
     #is shop_item_cnt_month{val_month}
-    for X_val, Y_val in create_batch_val(merged,batch_size, val_month, shop_item_pairs_in_dbn):#but then cartesian product used
-
+    for X_val, Y_val in create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn, batch_size_to_read):#but then cartesian product used
+        if X_val is None:
+                    continue
+        
         if type(model) in [sklearn.linear_model._coordinate_descent.Lasso,
                           SVC]:
             
@@ -389,8 +422,7 @@ def validate_model(model,merged,batch_size, val_month, columns_order, shop_item_
                     
             pass
             
-        if X_val is None:
-            continue
+        
             
         Y_val = np.clip(Y_val,0,20)
         
@@ -430,7 +462,7 @@ def validate_model(model,merged,batch_size, val_month, columns_order, shop_item_
 
     return val_preds, val_rmse
 
-def validate_ML(merged, model,batch_size,start_val_month, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn):
+def validate_ML(model,batch_size,start_val_month, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
     """
     Function for validating model
     
@@ -444,13 +476,10 @@ def validate_ML(merged, model,batch_size,start_val_month, shop_item_pairs_in_dbn
     for val_month in range(start_val_month, 34):
 
         
-        #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=456, n_estimators = 500,  learning_rate=0.005)
-
-        
         print('date_block_num', val_month)
         print('month', val_month%12)
 
-        model,columns_order = train_model(model, merged,batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn)
+        model,columns_order = train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read)
         print('feature importances, ')
         print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
         
@@ -458,7 +487,7 @@ def validate_ML(merged, model,batch_size,start_val_month, shop_item_pairs_in_dbn
         #num_trees = len(dump_list)
         
         #print('n_estimators:', model.n_estimators_)
-        val_pred, val_error = validate_model(model,merged,batch_size, val_month,columns_order, shop_item_pairs_in_dbn)
+        val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
         
         val_errors.append(val_error)
         val_preds.append(val_pred)
@@ -466,14 +495,14 @@ def validate_ML(merged, model,batch_size,start_val_month, shop_item_pairs_in_dbn
 
     return val_errors, val_preds
 
-def create_submission(model,merged,batch_size, columns_order, shop_item_pairs_in_dbn):
+def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,batch_size_to_read):
     val_month = 34
     test = pd.read_csv('../data_cleaned/test.csv')
     
     data_test = test
     PREDICTION = pd.DataFrame(columns=['shop_id','item_id','item_cnt_month'])
     Y_true_l=[]
-    for X_val, Y_val in create_batch_val(merged,batch_size, val_month, shop_item_pairs_in_dbn):
+    for X_val, Y_val in create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn,batch_size_to_read):
         if type(model) in [sklearn.linear_model._coordinate_descent.Lasso,
                           SVC]:
             
@@ -522,21 +551,21 @@ def create_submission(model,merged,batch_size, columns_order, shop_item_pairs_in
     data_test = data_test.merge(PREDICTION,on=['shop_id','item_id'])[['ID','item_cnt_month']]
     return data_test
 
-def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn):
+def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
     val_errors = []
     
     val_errors=[]
 
-    #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 100,  learning_rate=0.005)
-    model =RandomForestRegressor(max_depth = 11, n_estimators = 150,n_jobs=8)
-    model,columns_order = train_model(model, merged,batch_size, 34, shop_item_pairs_WITH_PREV_in_dbn)
+    #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=5, n_estimators = 1,  learning_rate=0.005)
+    #model =RandomForestRegressor(max_depth = 11, n_estimators = 150,n_jobs=8)
+    model,columns_order = train_model(model,batch_size, 34, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read)
     
     print('Feature importnaces in lgb:')
     
     print(model.feature_names_in_[np.argsort(model.feature_importances_)][::-1])
-    #print('n_estimators:', model.n_estimators_)
+    print('n_estimators:', model.n_estimators_)
     
-    data_test = create_submission(model,merged,batch_size,columns_order, shop_item_pairs_in_dbn)
+    data_test = create_submission(model,batch_size,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
 
     return data_test
     
@@ -549,38 +578,36 @@ if __name__ == '__main__':
     data_train = pd.concat([data_train,test ], ignore_index=True).drop('ID', axis=1).fillna(0)
 
     shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn = prepare_past_ID_s_CARTESIAN(data_train)
-
-    chunksize = 50000
-    l=[]
-    with pd.read_csv('data/merged.csv', chunksize=chunksize) as reader:
-        for chunk in reader:
-            l.append(chunk)
     
-    merged = pd.concat(l)
+    
     start_val_month=22
     #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 100,  learning_rate=0.005)
-    model =RandomForestRegressor(max_depth = 11, n_estimators = 100,n_jobs=8)
+    model =RandomForestRegressor(max_depth = 11, n_estimators = 150,n_jobs=8)
     batch_size=100000
+    batch_size_to_read=200000
+
     is_create_submission=False
 
 
     if is_create_submission:
 
-        submission = create_submission_pipeline(merged=merged, 
+        submission = create_submission_pipeline(merged=None, 
                                             model=model,
                                             batch_size=batch_size,
                                             shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
-                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn
+                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
+                                            batch_size_to_read=batch_size_to_read
                                             )
         submission.to_csv('submission.csv', index=False)
         print(submission.describe())
 
     else:
 
-        val_errors, val_preds = validate_ML(merged=merged,
+        val_errors, val_preds = validate_ML(
                                             model=model,
                                             batch_size=batch_size,
                                             start_val_month=start_val_month, 
                                             shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
-                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn
+                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
+                                            batch_size_to_read=batch_size_to_read
         )

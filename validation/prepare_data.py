@@ -6,6 +6,41 @@ import gc
 
 FIRST_N_MONTH_TO_DROP = 6
 
+def prepare_past_ID_s_CARTESIAN(data_train):
+    data_train['shop_item'] = [tuple([shop, item]) for shop, item in zip(data_train['shop_id'], data_train['item_id'])]
+    #34 block contains A LOT more shop_item than others
+    shop_item_pairs_in_dbn = data_train.groupby('date_block_num')['shop_item'].apply(np.unique)
+    data_train = data_train.drop(['shop_item'], axis=1)
+    
+    shop_item_pairs_WITH_PREV_in_dbn = np.array([None] * len(shop_item_pairs_in_dbn))
+    
+    #print(np.array(shop_item_pairs_WITH_PREV_in_dbn.index))
+    
+
+    cartesians = []
+    for dbn in shop_item_pairs_in_dbn.index:
+        val = shop_item_pairs_in_dbn[dbn]
+
+        shops = np.unique(list(zip(*val))[0])
+        items = np.unique(list(zip(*val))[1])
+    
+        cartesian_product = np.random.permutation (np.array(np.meshgrid(shops, items)).T.reshape(-1, 2))
+        #print(cartesian_product)
+        cartesians.append(cartesian_product)
+        
+    
+    shop_item_pairs_WITH_PREV_in_dbn[0] = cartesians[0]
+    
+    for block in shop_item_pairs_in_dbn.index:
+        if block == 0:
+            continue
+        arr = np.append(shop_item_pairs_WITH_PREV_in_dbn[block - 1],
+                             cartesians[block], axis=0)#shop_item_pairs_WITH_PREV_in_dbn doesnt contain 34 month
+        
+        shop_item_pairs_WITH_PREV_in_dbn[block] = np.unique(arr, axis=0)
+        print(len(shop_item_pairs_WITH_PREV_in_dbn[block]))
+    return shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn
+
 def create_change(table):
     table=table.copy().fillna(0)
 
@@ -57,7 +92,7 @@ def calculate_ema_6(table, alpha=2/(6+1)):
     weights = (1 - alpha) ** np.arange(6)
     print(weights)
     
-    for dbn in range(EMA_period, 34):
+    for dbn in range(EMA_period, 35):#???
         lag_cols =  [str(i) for i in range(dbn - EMA_period+1, dbn+1)]
         
         df_in = table[lag_cols].fillna(0)
@@ -78,7 +113,7 @@ def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_categ
     means = find_mean_by(source, groupby, item_shop_city_category_sup_category)
     if np.isclose(alpha , 1.0):
         numerical = [col for col in means.columns if col.isdigit()]
-        numerical = [col for col in numerical if int(col) < 34]
+        numerical = [col for col in numerical if int(col) < 35]#include 34 as precise value calculated by this function
 
         train = means[['shop_id','item_id', *numerical]]
         return train
@@ -86,7 +121,7 @@ def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_categ
     emas = calculate_ema_6(means, alpha)
     
     numerical = [col for col in emas.columns if col.isdigit()]
-    numerical = [col for col in numerical if int(col) < 34]
+    numerical = [col for col in numerical if int(col) < 35]
 
     train = emas[['shop_id','item_id', *numerical]]
     return train
@@ -115,73 +150,57 @@ def rename_columns(df, name=None):
     #return df
 
 
-def merge_boosting(merged, pathes):
-    group_bys_EMA = [['shop_id','item_category_id'],
-                    ['item_id','city'],
-                    ['item_id'],
-                    ['item_category_id','city']]
-    EMA_names = [f'data/ema_{'_'.join(gr)}' for gr in group_bys_EMA]
 
-    group_bys_lags = [
-        #['shop_id','item_id'],
-        ['item_id'],
-        ['shop_id']
-        ]
-    lags_names = [f'data/value_{'_'.join(gr)}' for gr in group_bys_lags]
+def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_sup_category=None):
+
+    def create_batch_for_writing(file_length, chunksize):
+        l = file_length
+        
+        chunk_num = l // chunksize if l%chunksize==0  else   l // chunksize+ 1
+        i_l = []
+        for i in range(chunk_num):
+            i_l.append([i*chunksize, min((i+1)*chunksize, file_length)])
+
+        return i_l
+
+    critical=['change','mean','ema']
+
+    #data = pd.read_csv('data/'+path+'.csv', chunksize=chunksize)
+    idxs = create_batch_for_writing(len(item_shops), chunksize)
+
+    first = True
     
-    
-    def merge_csvs_boosting(df0, pathes):
-        critical=['change','mean','ema']
-        rename_columns(df0, 'shop_item_cnt')
+    for idx in idxs:
+        first_inner = True
         for path in pathes:
-            df = pd.read_csv('data/'+path+'.csv')
-            print(sum(df.memory_usage()/10**6))
-    
             
+            batch=pd.read_csv(f'data/{path}.csv',skiprows=range(1,idx[0] + 1),nrows=idx[1] - idx[0])
+            if first_inner:
+                init = batch[['shop_id','item_id']]
+                first_inner=False
+
             for i in range(FIRST_N_MONTH_TO_DROP):#exclude features where past can not be calculated
                 
                 if any(cr in path for cr in critical):
                     
-                    df=df.drop(str(i), axis=1)
+                    batch=batch.drop(str(i), axis=1)
             
-            rename_columns(df, path)
+            rename_columns(batch, path)
             
-            df0 = pd.merge(df0, df, on=['shop_id','item_id'], how = 'left')
-            del df
+            init = pd.merge(init, batch, on=['shop_id','item_id'], how = 'right')
+            print(sum(batch.memory_usage()/10**6))
+            #del batch
             gc.collect()
-    
-        return df0
-    
-    
-    
-    
-    merge_csvs_boosting(merged, pathes).to_csv('data/merged.csv', index=False)
+
+        if first:
+            
+            init.merge(item_shop_city_category_sup_category,on=['shop_id','item_id'], how='left').to_csv('data/merged.csv', index=False)
+            first= False
+        else:
+            init.merge(item_shop_city_category_sup_category,on=['shop_id','item_id'], how='left').to_csv('data/merged.csv', mode='a', index=False, header=False)
+
     print('names in merged,',pathes )
 
-
-def merge_LSTM(merged):
-
-    def merge_csvs_LSTM(df0, names):
-        
-        df0=df0.drop('0', axis=1)
-        
-        rename_columns(df0, 'shop_item_cnt')
-        for df_name in names:
-            df = pd.read_csv('data/'+df_name+'.csv')
-            print(sum(df.memory_usage()/10**6))
-    
-            df=df.drop(str(0), axis=1)
-        
-            rename_columns(df, df_name)
-            
-            df0 = pd.merge(df0, df, on=['shop_id','item_id'], how = 'left')
-            del df
-            gc.collect()
-    
-        return df0
-    
-    names_LSTM = []
-    merge_csvs_LSTM(merged, names_LSTM).to_csv('data/merged.csv', index=False)
 
 def prepare_files(merged,data_train, item_shop_city_category_sup_category, alpha=2/(6+1)):
     group_bys_EMA = [['shop_id','item_category_id'],
@@ -222,6 +241,60 @@ def prepare_files(merged,data_train, item_shop_city_category_sup_category, alpha
     names += ['item_price_change']
     return names
 
+
+def calc_and_write_chunk(merged, data_train,item_shop_city_category_sup_category, chunksize_when_writing):
+
+    alpha=0.0
+
+    pathes = prepare_files(merged,data_train,item_shop_city_category_sup_category, alpha=alpha)
+
+    shop_city=item_shop_city_category_sup_category[['shop_id','city']].drop_duplicates()
+    category_super_category=item_shop_city_category_sup_category[['item_category_id','super_category']].drop_duplicates()
+
+    merged=merged.merge(shop_city, on='shop_id', how='left')
+    merged=merged.merge(category_super_category, on='item_category_id', how='left')
+
+    #merged['city'] = merged['city'].map(lambda a:a[0])
+    #merged['super_category'] = merged['super_category'].map(lambda a:a[0])
+
+    prepare_for_boosting=True
+    
+    shop_item=item_shop_city_category_sup_category[['shop_id','item_id']].drop_duplicates()
+    if prepare_for_boosting:
+        merge_boosting(shop_item, pathes, chunksize_when_writing,item_shop_city_category_sup_category)
+
+    
+def create_split(past, chunk_size=300000):
+    l = len(past)
+    idxs = np.random.permutation(l)
+    chunk_num = l // chunk_size if l%chunk_size==0  else   l // chunk_size+ 1
+    i_l = []
+    for i in range(chunk_num):
+        i_l.append(idxs[i*chunk_size:(i+1)*chunk_size])
+
+    return i_l
+
+def prepare_batches(past, data_train,item_shop_city_category_sup_category, merged, chunk_size):
+
+    
+    
+    l = len(past)
+    idxs = create_split(past, chunk_size=chunk_size)
+    for chunk in idxs:
+        all_cartesians = past[chunk]
+        all_cartesians=pd.DataFrame({'shop_id':all_cartesians[:,0], 'item_id':all_cartesians[:,1]})
+
+
+        shop_city=item_shop_city_category_sup_category[['shop_id','city']].drop_duplicates()
+        item_category=item_shop_city_category_sup_category[['item_id','item_category_id']].drop_duplicates()
+        category_super_category=item_shop_city_category_sup_category[['item_category_id','super_category']].drop_duplicates()
+
+
+        item_shop_city_category_sup_category_ret = all_cartesians.merge(shop_city).merge(item_category).merge(category_super_category)
+        merged_ret = pd.merge(all_cartesians,merged, on=['item_id','shop_id'], how='left' ).fillna(0)
+
+        yield merged_ret, item_shop_city_category_sup_category_ret
+
 if __name__ == '__main__':
 
     data_train = pd.read_csv('../data_cleaned/data_train.csv')
@@ -240,9 +313,11 @@ if __name__ == '__main__':
 
     merged = create_item_shop_data(data_train)
     #may be would be better to merge with (shop, item) cartesian
-    shop_city = whole.groupby('shop_id')['city'].unique().reset_index()
     
+    shop_city = whole.groupby('shop_id')['city'].unique().reset_index()
+    item_category = whole.groupby('item_id')['item_category_id'].unique().reset_index()
     category_super_category = whole.groupby('item_category_id')['super_category'].unique().reset_index()
+
     item_shop_city_category_sup_category = merged.merge(shop_city). \
     merge(category_super_category)[['shop_id',	'item_id','item_category_id','city','super_category']]
 
@@ -250,18 +325,16 @@ if __name__ == '__main__':
     item_shop_city_category_sup_category['super_category'] = item_shop_city_category_sup_category['super_category'].map(lambda a:a[0])
     
     
+
     del whole
-    pathes = prepare_files(merged,data_train,item_shop_city_category_sup_category, alpha=0.0)
-    
-    merged=merged.merge(shop_city, on='shop_id', how='left')
-    merged=merged.merge(category_super_category, on='item_category_id', how='left')
-    merged['city'] = merged['city'].map(lambda a:a[0])
-    merged['super_category'] = merged['super_category'].map(lambda a:a[0])
+    del test
 
-    prepare_for_boosting=True
-    
-    if prepare_for_boosting:
-        merge_boosting(merged, pathes)
+    past = prepare_past_ID_s_CARTESIAN(data_train)[-1][-1]
 
-    else:
-        merge_LSTM(merged)
+    first = True
+    chunk_size=len(past)
+    chunksize_when_writing = 200000
+
+    for batch, item_shop_city_category_sup_category in prepare_batches(past,data_train,item_shop_city_category_sup_category, merged, chunk_size=chunk_size):
+        calc_and_write_chunk(batch,data_train,item_shop_city_category_sup_category, chunksize_when_writing)
+        first = False
