@@ -9,8 +9,6 @@ FIRST_N_MONTH_TO_DROP = 6
 def create_change(table):
     table=table.copy().fillna(0)
 
-    
-
     cols = [col for col in table.columns if col.isdigit()]
     #print(cols)
     cols.sort()
@@ -25,47 +23,6 @@ def create_change(table):
         
 
 import time
-def create_lag_table_general(data,column='item_cnt_monthitem_id_lag_1',
-                             whole=None,
-                             groupby = ['item_id'],
-                             item_shop_city_category_sup_category=None):#long - ~467s
-    #whole contains lagged, which means for dbn = 24 lag_1 calculated on 23
-    #(item cnt month for dbn==24 stored in lag_1 for dbn == 25 )
-    #to make whole same format as data, we need to whole['date_block_num']-=1
-    start = time.time()
-
-    whole=whole[['shop_id','item_id','date_block_num',column]]
-    #new_table = data.copy()
-    if 'lag' in column:
-        whole['date_block_num'] -= 1
-        whole = whole[whole['date_block_num'] >= 0]
-
-    
-
-    #print(whole.date_block_num)
-    agg = 'mean'
-    df = pd.pivot_table(whole, 
-                    index=['shop_id','item_id'],
-                    columns=['date_block_num'],
-                    values=[column],
-                    aggfunc=agg, 
-                    fill_value=0
-                   ).reset_index()
-
-    train = pd.DataFrame({col:df[col] for col in ['shop_id','item_id']})
-    
-    col = df[column]
-    del df
-    gc.collect()
-    train = pd.concat([train,col], axis=1)
-
-    numerical = [col for col in train.columns if isinstance(col, int)]
-    numerical = [col for col in numerical if col < 34]
-    train = item_shop_city_category_sup_category.merge(train, how='left').fillna(0)
-    train = train[['shop_id','item_id', *numerical]]
-    print(train)
-    return train
-
 
 def create_item_shop_data(data, column='item_cnt_day'):
     if column == 'item_cnt_day':
@@ -92,43 +49,49 @@ def create_item_shop_data(data, column='item_cnt_day'):
     merged.columns = [str(col) for col in merged.columns]
     return merged
 
-
-
-def write_file_by_name(merged,column=None, whole=None, groupby='', shop_city=None,category_super_category=None ):
-    time1 = time.time()
-    item_shop_city_category_sup_category = merged.merge(shop_city). \
-    merge(category_super_category)[['shop_id',	'item_id','item_category_id','city','super_category']]
+def calculate_ema_6(table, alpha=2/(6+1)):
+    EMAs = pd.DataFrame(columns = table.columns)
+    EMAs['shop_id'] = table['shop_id']
+    EMAs['item_id'] = table['item_id']
+    EMA_period = 6
+    weights = (1 - alpha) ** np.arange(6)
+    print(weights)
     
-    item_shop_city_category_sup_category['city'] = item_shop_city_category_sup_category['city'].map(lambda a:a[0])
-    item_shop_city_category_sup_category['super_category'] = item_shop_city_category_sup_category['super_category'].map(lambda a:a[0])
-
-    table_ema6_item = create_lag_table_general(merged,
-                                               column=column,
-                                               whole=whole,
-                                               groupby=groupby, 
-                                               item_shop_city_category_sup_category=item_shop_city_category_sup_category)
+    for dbn in range(EMA_period, 34):
+        lag_cols =  [str(i) for i in range(dbn - EMA_period+1, dbn+1)]
+        
+        df_in = table[lag_cols].fillna(0)
+        
+        weighted_sums = np.dot(df_in[lag_cols].values, weights)
+        
+        EMAs[str(dbn)] = weighted_sums / sum(weights)
     
-    table_ema6_item.to_csv(f'data/{column}.csv', index=False)
-    #print(table_ema6_item.columns)
-    del table_ema6_item
-    gc.collect()
+    return EMAs
 
-    print('time taken for',column,':', time.time() - time1  )
+def find_mean_by(merged, group_by=None,item_shop_city_category_sup_category=None):
+    merged=merged.merge(item_shop_city_category_sup_category, how='left')
+    means = merged.groupby(group_by)[[name for name in merged.columns if name.isdigit()]].mean().reset_index()
+    return item_shop_city_category_sup_category.merge(means, how='left')
 
+def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_category_sup_category=None):
+    
+    means = find_mean_by(source, groupby, item_shop_city_category_sup_category)
+    if np.isclose(alpha , 1.0):
+        numerical = [col for col in means.columns if col.isdigit()]
+        numerical = [col for col in numerical if int(col) < 34]
 
+        train = means[['shop_id','item_id', *numerical]]
+        return train
+    
+    emas = calculate_ema_6(means, alpha)
+    
+    numerical = [col for col in emas.columns if col.isdigit()]
+    numerical = [col for col in numerical if int(col) < 34]
 
+    train = emas[['shop_id','item_id', *numerical]]
+    return train
+    
 
-
-names_base = ['ema_6_item_cnt_month_item_id',
-             'ema_6_item_cnt_month_item_id_shop_id',
-             'ema_6_item_cnt_month_item_category_id_cat_city',
-             'ema_6_item_cnt_month_item_category_id_cat_shop_id',
-             'date_block_num_diff',
-            'avg_item_priceitem_id_lag_1',
-            'item_cnt_monthitem_category_id_cat_lag_1',
-            'item_cnt_month_lag_1',
-             'avg_item_price']
-#Lag in a name left from columns name; Value for curr month stored in validation/data
 
 def rename_columns(df, name=None):
     
@@ -152,23 +115,36 @@ def rename_columns(df, name=None):
     #return df
 
 
-def merge_boosting(merged):
+def merge_boosting(merged, pathes):
+    group_bys_EMA = [['shop_id','item_category_id'],
+                    ['item_id','city'],
+                    ['item_id'],
+                    ['item_category_id','city']]
+    EMA_names = [f'data/ema_{'_'.join(gr)}' for gr in group_bys_EMA]
 
-    def merge_csvs_boosting(df0, names):
+    group_bys_lags = [
+        #['shop_id','item_id'],
+        ['item_id'],
+        ['shop_id']
+        ]
+    lags_names = [f'data/value_{'_'.join(gr)}' for gr in group_bys_lags]
+    
+    
+    def merge_csvs_boosting(df0, pathes):
         critical=['change','mean','ema']
         rename_columns(df0, 'shop_item_cnt')
-        for df_name in names:
-            df = pd.read_csv('data/'+df_name+'.csv')
+        for path in pathes:
+            df = pd.read_csv('data/'+path+'.csv')
             print(sum(df.memory_usage()/10**6))
     
             
             for i in range(FIRST_N_MONTH_TO_DROP):#exclude features where past can not be calculated
                 
-                if any(cr in df_name for cr in critical):
+                if any(cr in path for cr in critical):
                     
                     df=df.drop(str(i), axis=1)
             
-            rename_columns(df, df_name)
+            rename_columns(df, path)
             
             df0 = pd.merge(df0, df, on=['shop_id','item_id'], how = 'left')
             del df
@@ -176,18 +152,11 @@ def merge_boosting(merged):
     
         return df0
     
-    names_boosting =['ema_6_item_cnt_month_item_id',
-                     #'ema_6_item_cnt_month_item_category_id_cat_city',
-                     'ema_6_item_cnt_month_item_category_id_cat_shop_id',
-                     'date_block_num_diff',
-                     'avg_item_priceitem_id_lag_1',
-                     'item_cnt_monthitem_category_id_cat_lag_1',
-                     'item_cnt_monthitem_id_lag_1',
-                     #'avg_item_price',
-                     'item_price_change']
     
     
-    merge_csvs_boosting(merged, names_boosting).to_csv('data/merged.csv', index=False)
+    
+    merge_csvs_boosting(merged, pathes).to_csv('data/merged.csv', index=False)
+    print('names in merged,',pathes )
 
 
 def merge_LSTM(merged):
@@ -211,101 +180,47 @@ def merge_LSTM(merged):
     
         return df0
     
-    names_LSTM = ['avg_item_price']
+    names_LSTM = []
     merge_csvs_LSTM(merged, names_LSTM).to_csv('data/merged.csv', index=False)
 
-def prepare_files(merged, whole,shop_city,category_super_category):
+def prepare_files(merged,data_train, item_shop_city_category_sup_category, alpha=2/(6+1)):
+    group_bys_EMA = [['shop_id','item_category_id'],
+                 ['item_id','city'],
+                 ['item_id'],
+                 ['item_category_id','city']]
+    names = []
+    for gr in group_bys_EMA:
+        train = calculate_EMAs_pipeline(merged,
+                                         gr, 
+                                         alpha=alpha,
+                                         item_shop_city_category_sup_category=item_shop_city_category_sup_category)
+        print(train)
+        train.to_csv(f'data/ema_{'_'.join(gr)}.csv', index=False)
+        names.append(f'ema_{'_'.join(gr)}')
+        
+    group_bys_lags = [['shop_id','item_id'],
+                 ['item_id'],
+                 ['shop_id']]
     
-    write_file_by_name(merged,column='ema_6_item_cnt_month_item_id',
-                        whole=whole, 
-                        groupby=['item_id'],
-                        shop_city=shop_city,
-                        category_super_category=category_super_category
-                        )
-    #write_file_by_name(merged,column='ema_6_item_cnt_month_item_id_shop_id', whole=whole, groupby=['item_id','shop_id'])
-    write_file_by_name(merged,
-                       column='ema_6_item_cnt_month_item_category_id_cat_city', 
-                       whole=whole, groupby= ['item_category_id','city'],
-                       shop_city=shop_city,
-                        category_super_category=category_super_category
-                        )
-    
+    for gr in group_bys_lags:
+        train = calculate_EMAs_pipeline(merged,
+                                         gr, 
+                                         alpha=1.0,
+                                         item_shop_city_category_sup_category=item_shop_city_category_sup_category)
+        print(train)
+        train.to_csv(f'data/value_{'_'.join(gr)}.csv', index=False)
+        names.append(f'value_{'_'.join(gr)}')
 
-    write_file_by_name(merged,
-                       column='ema_6_item_cnt_month_item_category_id_cat_shop_id', 
-                       whole=whole, 
-                       groupby=['item_category_id','shop_id'],
-                       shop_city=shop_city,
-                        category_super_category=category_super_category
-                        )
-    
-    write_file_by_name(merged,
-                       column='date_block_num_diff', 
-                       whole=whole, 
-                       groupby=['item_id'],
-                       shop_city=shop_city,
-                        category_super_category=category_super_category
-                        )
-    write_file_by_name(merged,column='avg_item_priceitem_id_lag_1', 
-                       whole=whole, 
-                       groupby=['item_id'],
-                       shop_city=shop_city,
-                        category_super_category=category_super_category
-                        )
-    
-    write_file_by_name(merged,
-                       column='item_cnt_monthitem_category_id_cat_lag_1', 
-                       whole=whole, 
-                       groupby=['item_category_id'],
-                       shop_city=shop_city,
-                        category_super_category=category_super_category
-                        )
-    
-    write_file_by_name(merged,
-                       column='avg_item_price',
-                         whole=whole, 
-                         groupby=['item_id','shop_id'],
-                         shop_city=shop_city,
-                        category_super_category=category_super_category
-                        )
-    
-    write_file_by_name(merged,
-                       column='item_cnt_monthitem_id_lag_1',
-                         whole=whole, 
-                         groupby=['item_id'],
-                         shop_city=shop_city,
-                        category_super_category=category_super_category
-                        )
-    
-    
-    
-    table_item_price = pd.read_csv('data/avg_item_priceitem_id_lag_1.csv')
-    price_changes_items = create_change(table_item_price)
-    price_changes_items.to_csv('data/item_price_change.csv', index=False)
-    del table_item_price
-    del price_changes_items
-    gc.collect()
-    
-    prices = pd.read_csv('data/avg_item_price.csv')
-    price_changes = create_change(prices)
-    price_changes.to_csv('data/shop_item_price_change.csv', index=False)
-    del price_changes
-    del prices
-    gc.collect()
-    
-    cnt_changes_items_shops = create_change(merged)
-    cnt_changes_items_shops.to_csv('data/cnt_changes_items_shops.csv', index=False)
-    del cnt_changes_items_shops
-    gc.collect()
-    
-    
-    table_item_cnt = pd.read_csv('data/item_cnt_monthitem_id_lag_1.csv')
-    cnt_changes_items = create_change(table_item_cnt)
-    cnt_changes_items.to_csv('data/cnt_changes_items.csv', index=False)
-    del cnt_changes_items
-    del table_item_cnt
-    gc.collect()
-    
+
+    prices = create_item_shop_data(data_train, column='item_price')
+    mean_prices_items = calculate_EMAs_pipeline(prices, 
+                                                ['item_id'], 
+                                                item_shop_city_category_sup_category=item_shop_city_category_sup_category,
+                                                alpha=1.0)
+    changes = create_change(mean_prices_items)
+    changes.to_csv('data/item_price_change.csv', index=False)
+    names += ['item_price_change']
+    return names
 
 if __name__ == '__main__':
 
@@ -322,16 +237,21 @@ if __name__ == '__main__':
     data_train = data_train.sort_values(by='date_block_num')
     train = data_train.copy()
     whole = pd.read_csv('../data.csv')
-    
+
+    merged = create_item_shop_data(data_train)
+    #may be would be better to merge with (shop, item) cartesian
     shop_city = whole.groupby('shop_id')['city'].unique().reset_index()
     
     category_super_category = whole.groupby('item_category_id')['super_category'].unique().reset_index()
-    
-    
-    merged = create_item_shop_data(data_train)
+    item_shop_city_category_sup_category = merged.merge(shop_city). \
+    merge(category_super_category)[['shop_id',	'item_id','item_category_id','city','super_category']]
 
+    item_shop_city_category_sup_category['city'] = item_shop_city_category_sup_category['city'].map(lambda a:a[0])
+    item_shop_city_category_sup_category['super_category'] = item_shop_city_category_sup_category['super_category'].map(lambda a:a[0])
     
-    #prepare_files(merged,whole,shop_city,category_super_category)
+    
+    del whole
+    pathes = prepare_files(merged,data_train,item_shop_city_category_sup_category, alpha=0.0)
     
     merged=merged.merge(shop_city, on='shop_id', how='left')
     merged=merged.merge(category_super_category, on='item_category_id', how='left')
@@ -341,7 +261,7 @@ if __name__ == '__main__':
     prepare_for_boosting=True
     
     if prepare_for_boosting:
-        merge_boosting(merged)
+        merge_boosting(merged, pathes)
 
     else:
         merge_LSTM(merged)

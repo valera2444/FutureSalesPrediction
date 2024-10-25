@@ -107,7 +107,7 @@ def prepare_train(data, valid ):
     valid_shop_item = list(zip(*valid_shop_item))
     df = pd.DataFrame({'item_id':valid_shop_item[1],'shop_id':valid_shop_item[0]} )
     data = df.merge(data, on=['shop_id','item_id'], how='left').fillna(0)
-    
+
     return data
 
 
@@ -234,22 +234,13 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
         name = l[0]
         num = int(l[1])
         
-        #if 'change' in name:
-        #    continue
         
-        #if 'ema' in name:
-        #    continue
-        
-        if 'ema_6_item_cnt_month_item_category_id_cat_city' in name:
+        if 'ema' in name:
            if num <= 3:
                 cols.append(col)
                 continue
             
-       
-        if 'ema_6_item_cnt_month_item_id_shop_id' in name:
-            if num <= 3:
-                cols.append(col)
-                continue
+    
             
         if 'diff' in name:
             if num == 1:
@@ -266,22 +257,8 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
 
             continue
                 
-        if 'ema' in name:
-            if num <= 3:
-                cols.append(col)
-                continue
-
-            continue
-               
-        if 'price' in name:
-            continue
-            if num <= 3:
-                cols.append(col)
-                continue
-
-            continue
         
-        if 'shop_item_cnt' in name:
+        if 'value_shop_id_item_id' in name:
             if num <=6 or num == 12:
                 cols.append(col)
                 continue
@@ -551,7 +528,7 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
     val_errors=[]
 
     #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 100,  learning_rate=0.005)
-    #model =RandomForestRegressor(max_depth = 11, n_estimators = 150,n_jobs=8)
+    model =RandomForestRegressor(max_depth = 11, n_estimators = 150,n_jobs=8)
     model,columns_order = train_model(model, merged,batch_size, 34, shop_item_pairs_WITH_PREV_in_dbn)
     
     print('Feature importnaces in lgb:')
@@ -581,8 +558,8 @@ if __name__ == '__main__':
     
     merged = pd.concat(l)
     start_val_month=22
-    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 100,  learning_rate=0.005)
-    #model =RandomForestRegressor(max_depth = 11, n_estimators = 150,n_jobs=8)
+    #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 100,  learning_rate=0.005)
+    model =RandomForestRegressor(max_depth = 11, n_estimators = 100,n_jobs=8)
     batch_size=100000
     is_create_submission=False
 
@@ -606,7 +583,4 @@ if __name__ == '__main__':
                                             start_val_month=start_val_month, 
                                             shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
                                             shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn
-                                            )
-        
-    
-    
+        )
