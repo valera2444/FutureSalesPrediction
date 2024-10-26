@@ -103,14 +103,19 @@ def calculate_ema_6(table, alpha=2/(6+1)):
     
     return EMAs
 
-def find_mean_by(merged, group_by=None,item_shop_city_category_sup_category=None):
+def find_mean_by(merged, group_by=None,item_shop_city_category_sup_category=None, is_cnt=True):
     merged=merged.merge(item_shop_city_category_sup_category, how='left')
-    means = merged.groupby(group_by)[[name for name in merged.columns if name.isdigit()]].mean().reset_index()
+    if is_cnt:
+        means = merged.groupby(group_by)[[name for name in merged.columns if name.isdigit()]].mean().reset_index()
+
+    else:
+        means = merged.groupby(group_by)[[name for name in merged.columns if name.isdigit()]].mean().reset_index()
+
     return item_shop_city_category_sup_category.merge(means, how='left')
 
-def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_category_sup_category=None):
+def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_category_sup_category=None,is_cnt=True):
     
-    means = find_mean_by(source, groupby, item_shop_city_category_sup_category)
+    means = find_mean_by(source, groupby, item_shop_city_category_sup_category,is_cnt)
     if np.isclose(alpha , 1.0):
         numerical = [col for col in means.columns if col.isdigit()]
         numerical = [col for col in numerical if int(col) < 35]#include 34 as precise value calculated by this function
@@ -212,7 +217,8 @@ def prepare_files(merged,data_train, item_shop_city_category_sup_category, alpha
         train = calculate_EMAs_pipeline(merged,
                                          gr, 
                                          alpha=alpha,
-                                         item_shop_city_category_sup_category=item_shop_city_category_sup_category)
+                                         item_shop_city_category_sup_category=item_shop_city_category_sup_category,
+                                         is_cnt=True)
         print(train)
         train.to_csv(f'data/ema_{'_'.join(gr)}.csv', index=False)
         names.append(f'ema_{'_'.join(gr)}')
@@ -225,17 +231,19 @@ def prepare_files(merged,data_train, item_shop_city_category_sup_category, alpha
         train = calculate_EMAs_pipeline(merged,
                                          gr, 
                                          alpha=1.0,
-                                         item_shop_city_category_sup_category=item_shop_city_category_sup_category)
+                                         item_shop_city_category_sup_category=item_shop_city_category_sup_category,
+                                         is_cnt=True)
         print(train)
         train.to_csv(f'data/value_{'_'.join(gr)}.csv', index=False)
         names.append(f'value_{'_'.join(gr)}')
 
 
     prices = create_item_shop_data(data_train, column='item_price')
-    mean_prices_items = calculate_EMAs_pipeline(prices, 
+    mean_prices_items = calculate_EMAs_pipeline(prices, #Worng
                                                 ['item_id'], 
                                                 item_shop_city_category_sup_category=item_shop_city_category_sup_category,
-                                                alpha=1.0)
+                                                alpha=1.0,
+                                                is_cnt=False)
     changes = create_change(mean_prices_items)
     changes.to_csv('data/item_price_change.csv', index=False)
     names += ['item_price_change']
@@ -244,7 +252,7 @@ def prepare_files(merged,data_train, item_shop_city_category_sup_category, alpha
 
 def calc_and_write_chunk(merged, data_train,item_shop_city_category_sup_category, chunksize_when_writing):
 
-    alpha=0.0
+    alpha=1.0
 
     pathes = prepare_files(merged,data_train,item_shop_city_category_sup_category, alpha=alpha)
 

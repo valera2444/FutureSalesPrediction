@@ -183,10 +183,10 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
     
     
     
-    train = np.random.permutation (shop_item_pairs_WITH_PREV_in_dbn[dbn-1])
+    train = np.random.permutation (shop_item_pairs_WITH_PREV_in_dbn[dbn])#-1?????????
 
-    chunk_num =  len(train)// batch_size if len(train)%batch_size==0  else   len(train) // batch_size + 1#MAY BE NEED TO CORRECT
-    
+    #chunk_num =  len(train)// batch_size if len(train)%batch_size==0  else   len(train) // batch_size + 1#MAY BE NEED TO CORRECT
+    chunk_num =  len(train)// batch_size if len(train)>=batch_size else 1#MAY BE NEED TO CORRECT
     for idx in range(chunk_num):#split shop_item_pairs_WITH_PREV_in_dbn into chuncks
         l_x=[]
         l_y=[]
@@ -257,19 +257,27 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
     for col in X_train.columns:
         l = col.split(';')
         if len(l) == 1:
+           
             cols.append(col)
             continue
 
         name = l[0]
         num = int(l[1])
         
-        
+        if 'ema_item_id' in name:
+            continue
         if 'ema' in name:
            if num <= 3:
                 cols.append(col)
                 continue
-            
-    
+        if 'value_shop_id_item_id' in name:
+            if num <=6 or num == 12:
+                cols.append(col)
+                continue
+        if 'value' in name:
+            if num <=3:
+                cols.append(col)
+                continue
             
         if 'diff' in name:
             if num == 1:
@@ -280,17 +288,14 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
             
         if 'change' in name:
 
-            if num <= 3:
+            if num <= 1:
                 cols.append(col)
                 continue
 
             continue
                 
         
-        if 'value_shop_id_item_id' in name:
-            if num <=6 or num == 12:
-                cols.append(col)
-                continue
+        
         
     
     
@@ -581,12 +586,12 @@ if __name__ == '__main__':
     
     
     start_val_month=22
-    #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 100,  learning_rate=0.005)
-    model =RandomForestRegressor(max_depth = 11, n_estimators = 150,n_jobs=8)
-    batch_size=100000
+    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 200,  learning_rate=0.005)
+    #model =RandomForestRegressor(max_depth = 10, n_estimators = 150,n_jobs=8)
+    batch_size=200000
     batch_size_to_read=200000
 
-    is_create_submission=False
+    is_create_submission=True
 
 
     if is_create_submission:
