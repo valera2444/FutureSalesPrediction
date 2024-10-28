@@ -256,7 +256,7 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
         t2 = time.time()
         print(f'EMA calculated for {'_'.join(gr)}.csv; time:', t2-t1)
         names.append(f'value_{'_'.join(gr)}')
-
+    """
     group_bys_lags_prices = [['item_id']]
     
     for gr in group_bys_lags_prices:
@@ -272,7 +272,7 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
         t2 = time.time()
         print(f'EMA calculated for {'_'.join(gr)}.csv; time:', t2-t1)
         names.append(f'value_price_{'_'.join(gr)}')
-
+    """
     t1 = time.time()
     #prices = create_pivot_table(data_train,index=['item_id','shop_id'], item_shop_city_category_sup_category=item_shop_city_category_sup_category,column='item_price')
     mean_prices_items = calculate_EMAs_pipeline(data_train, #Worng or not already

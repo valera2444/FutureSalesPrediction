@@ -18,7 +18,7 @@ import time
 
 #np.random.seed(42)
 
-
+SOURCE_PATH = 'data/merged.csv'
 def prepare_past_ID_s(data_train):
     data_train['shop_item'] = [tuple([shop, item]) for shop, item in zip(data_train['shop_id'], data_train['item_id'])]
     #34 block contains A LOT more shop_item than others
@@ -177,6 +177,44 @@ def prepare_data_validation_boosting(data, valid, dbn):
     
     return X, Y
 
+def select_columns_for_reading(path, dbn):
+   
+    columns = pd.read_csv(path, nrows=0).columns.tolist()
+
+    cols = []
+    for col in columns:
+        l = col.split('$')
+        if len(l) == 1:
+            cols.append(col)
+            continue
+
+        name = l[0]
+        num=int(l[1])
+        dbn_diff = dbn - num
+        
+        if 'value_shop_id_item_id' in col and np.isclose(dbn_diff,0):#target
+            cols.append(col)
+
+        if dbn_diff<=0:
+            continue
+
+
+        if 'ema' in name and dbn_diff <= 3:
+            cols.append(col)
+        elif 'value_shop_id_item_id' in name and (dbn_diff <= 6 or dbn_diff == 12):
+            cols.append(col)
+        elif 'value_price' in name and dbn_diff <= 1:
+            cols.append(col)
+        elif 'value' in name and dbn_diff <= 3:
+            cols.append(col)
+        elif 'diff' in name and dbn_diff == 1:
+            cols.append(col)
+        elif 'change' in name and dbn_diff <= 2:
+            cols.append(col)
+
+
+    return cols
+
 def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_size_to_read):
     """
     
@@ -186,11 +224,12 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
 
     #chunk_num =  len(train)// batch_size if len(train)%batch_size==0  else   len(train) // batch_size + 1#MAY BE NEED TO CORRECT
     chunk_num =  len(train)// batch_size if len(train)>=batch_size else 1#MAY BE NEED TO CORRECT
+    columns = select_columns_for_reading(SOURCE_PATH, dbn-1)#-1?????
     for idx in range(chunk_num):#split shop_item_pairs_WITH_PREV_in_dbn into chuncks
         t1 = time.time()
         l_x=[]
         l_y=[]
-        merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read)
+        merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read, skipinitialspace=True, usecols=columns)
         l_sum = 0
         for chunck in merged:#split merged into chuncks
             
@@ -223,8 +262,12 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
     cartesian_product = np.random.permutation (np.array(np.meshgrid(shops, items)).T.reshape(-1, 2))
     
     chunk_num =  len(cartesian_product)// batch_size if len(cartesian_product)%batch_size==0  else   len(cartesian_product) // batch_size + 1#MAY BE NEED TO CORRECT
+
+    columns = select_columns_for_reading(SOURCE_PATH, dbn)
+
+
     for idx in range(chunk_num):
-        merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read)
+        merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read, skipinitialspace=True, usecols=columns)
         l_x=[]
         l_y=[]
         l_sum=0
@@ -251,37 +294,24 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
 
 def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_columns(X_train,dbn) - to comment
     X_train = append_some_columns(X_train,dbn)
-    
     cols=[]
-
-    
     for col in X_train.columns:
         l = col.split(';')
         if len(l) == 1:
-           
             cols.append(col)
             continue
-
         name = l[0]
         num = int(l[1])
-        
-        #if 'value_item_id_lag' in name:
-        #    continue
-
         if 'ema' in name:
            if num <= 3:
                 cols.append(col)
                 continue
-        
         if 'value_shop_id_item_id' in name:
             if num <=6 or num == 12:
                 cols.append(col)
                 continue
-        
         if 'value_shop_id_lag' in name:
             continue
-
-        
 
         if 'value_price' in name:
             if num <= 1:
@@ -297,7 +327,6 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
             if num == 1:
                 cols.append(col)
                 continue
-
             continue
             
         if 'change' in name:
@@ -308,11 +337,6 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
 
             continue
         
-        
-        
-        
-    
-    
     return X_train[cols]
 
 def append_some_columns(X_train, dbn):
@@ -350,10 +374,10 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
                 #print(list(X_train.columns))
             
                 #X_train = X_train.drop('item_id', axis=1)
-                X_train['shop_id'] = X_train['shop_id'].astype('category')
-                X_train['item_category_id'] = X_train['item_category_id'].astype('category')
-                X_train['city'] = X_train['city'].astype('category')
-                X_train['super_category'] = X_train['super_category'].astype('category')
+                #X_train['shop_id'] = X_train['shop_id'].astype('category')
+                #X_train['item_category_id'] = X_train['item_category_id'].astype('category')
+                #X_train['city'] = X_train['city'].astype('category')
+                #X_train['super_category'] = X_train['super_category'].astype('category')
                 
                 pass
             
@@ -367,7 +391,7 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
             
             X_train = make_X_lag_format(X_train, val_month-1)
             
-            X_train=select_columns(X_train, val_month-1)
+            #X_train=select_columns(X_train, val_month-1)
             
                 
             columns_order=X_train.columns
@@ -448,10 +472,10 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
         else:
             
             #X_val = X_val.drop('item_id', axis=1)
-            X_val['shop_id'] = X_val['shop_id'].astype('category')
-            X_val['item_category_id'] = X_val['item_category_id'].astype('category')
-            X_val['city'] = X_val['city'].astype('category')
-            X_val['super_category'] = X_val['super_category'].astype('category')
+            #X_val['shop_id'] = X_val['shop_id'].astype('category')
+            #X_val['item_category_id'] = X_val['item_category_id'].astype('category')
+            #X_val['city'] = X_val['city'].astype('category')
+            #X_val['super_category'] = X_val['super_category'].astype('category')
                     
             pass
             
@@ -462,7 +486,7 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
         
         X_val = make_X_lag_format(X_val, val_month)
         
-        X_val=select_columns(X_val, val_month)
+        #X_val=select_columns(X_val, val_month)
         X_val = X_val[columns_order]
 
         if type(model) in [Lasso,SVC]:
@@ -554,10 +578,10 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
         else:
             
             #X_val = X_val.drop('item_id', axis=1)
-            X_val['shop_id'] = X_val['shop_id'].astype('category')
-            X_val['item_category_id'] = X_val['item_category_id'].astype('category')
-            X_val['city'] = X_val['city'].astype('category')
-            X_val['super_category'] = X_val['super_category'].astype('category')
+            #X_val['shop_id'] = X_val['shop_id'].astype('category')
+            #X_val['item_category_id'] = X_val['item_category_id'].astype('category')
+            #X_val['city'] = X_val['city'].astype('category')
+            #X_val['super_category'] = X_val['super_category'].astype('category')
                     
             pass
 
@@ -573,7 +597,7 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
             
         
         X_val = make_X_lag_format(X_val, val_month)
-        X_val=select_columns(X_val, val_month)
+        #X_val=select_columns(X_val, val_month)
         X_val = X_val[columns_order]
 
         
@@ -628,14 +652,14 @@ if __name__ == '__main__':
     
     
     start_val_month=22
-    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 800,  learning_rate=0.005)
+    #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=750, n_estimators = 1700,  learning_rate=0.001)
     #model =RandomForestRegressor(max_depth = 10, n_estimators = 100,n_jobs=8)
-    #model = xgb.XGBRegressor(eta=0.005, max_leaves=348,nthread=8,device='gpu', enable_categorical=True,n_estimators=500)
+    model = xgb.XGBRegressor(eta=0.001, max_leaves=640,nthread=8,device='gpu', enable_categorical=True,n_estimators=5000)
    
     batch_size=70000000
-    batch_size_to_read=200000
+    batch_size_to_read=200000000
 
-    is_create_submission=False
+    is_create_submission=True
     epochs=1
 
     if is_create_submission:
