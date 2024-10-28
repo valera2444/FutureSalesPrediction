@@ -335,6 +335,8 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
                 X_train.drop('shop_id', inplace=True, axis=1) 
                 X_train.drop('item_category_id', inplace=True, axis=1) 
                 X_train.drop('item_id', inplace=True, axis=1)
+                X_train.drop('city', inplace=True, axis=1)
+                X_train.drop('shop_id', inplace=True, axis=1)
             else:
                 #print(list(X_train.columns))
             
@@ -429,7 +431,9 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
             
             X_val.drop('shop_id', inplace=True, axis=1) 
             X_val.drop('item_category_id', inplace=True, axis=1) 
-            X_val.drop('item_id', inplace=True, axis=1) 
+            X_val.drop('item_id', inplace=True, axis=1)
+            X_val.drop('city', inplace=True, axis=1)
+            X_val.drop('shop_id', inplace=True, axis=1)
             
 
         else:
