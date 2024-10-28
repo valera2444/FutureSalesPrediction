@@ -251,7 +251,7 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
 
 def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_columns(X_train,dbn) - to comment
     X_train = append_some_columns(X_train,dbn)
-    shop_item_cnt_lags= [1,2,3,4,5,6,7,8,9,10,11,12,24]
+    
     cols=[]
 
     
@@ -265,20 +265,29 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
         name = l[0]
         num = int(l[1])
         
-        
+        #if 'value_item_id_lag' in name:
+        #    continue
+
         if 'ema' in name:
            if num <= 3:
                 cols.append(col)
                 continue
+        
         if 'value_shop_id_item_id' in name:
             if num <=6 or num == 12:
                 cols.append(col)
                 continue
-
+        
         if 'value_shop_id_lag' in name:
             continue
 
+        
 
+        if 'value_price' in name:
+            if num <= 1:
+                cols.append(col)
+                continue
+            
         if 'value' in name:
             if num <=3:
                 cols.append(col)
@@ -298,7 +307,7 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
                 continue
 
             continue
-                
+        
         
         
         
@@ -619,12 +628,12 @@ if __name__ == '__main__':
     
     
     start_val_month=22
-    #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=256, n_estimators = 800,  learning_rate=0.005)
+    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 800,  learning_rate=0.005)
     #model =RandomForestRegressor(max_depth = 10, n_estimators = 100,n_jobs=8)
-    model = xgb.XGBRegressor(eta=0.005, max_leaves=348,nthread=8,device='gpu', enable_categorical=True,n_estimators=500)
+    #model = xgb.XGBRegressor(eta=0.005, max_leaves=348,nthread=8,device='gpu', enable_categorical=True,n_estimators=500)
    
-    batch_size=7000000
-    batch_size_to_read=300000
+    batch_size=70000000
+    batch_size_to_read=200000
 
     is_create_submission=False
     epochs=1
