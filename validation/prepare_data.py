@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 import gc
-
+import time
 
 FIRST_N_MONTH_TO_DROP = 6
 
@@ -38,7 +38,7 @@ def prepare_past_ID_s_CARTESIAN(data_train):
                              cartesians[block], axis=0)#shop_item_pairs_WITH_PREV_in_dbn doesnt contain 34 month
         
         shop_item_pairs_WITH_PREV_in_dbn[block] = np.unique(arr, axis=0)
-        print(len(shop_item_pairs_WITH_PREV_in_dbn[block]))
+        #print(len(shop_item_pairs_WITH_PREV_in_dbn[block]))
     return shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn
 
 def create_change(table):
@@ -90,7 +90,7 @@ def calculate_ema_6(table, alpha=2/(6+1)):
     EMAs['item_id'] = table['item_id']
     EMA_period = 6
     weights = (1 - alpha) ** np.arange(6)
-    print(weights)
+    print('EMAs weights:',weights)
     
     for dbn in range(EMA_period, 35):#???
         lag_cols =  [str(i) for i in range(dbn - EMA_period+1, dbn+1)]
@@ -131,7 +131,27 @@ def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_categ
     train = emas[['shop_id','item_id', *numerical]]
     return train
     
+def calculate_diff(df):
+    df_1=df.copy()
 
+    df['-1'] = 0.0
+
+    for dbn in range(0,35):
+        month_columns = [str(i) for i in range(-1,dbn+1)]
+        
+        
+        first_sale_months = df[month_columns].ge(0.00001).idxmax(axis=1).apply(int)#if mean < 0.00001 wouldnt work
+        
+        #print((first_sale_months == -1).sum())
+        
+        df_1[str(dbn)] =  int(dbn) -  first_sale_months.values 
+
+        df_1.loc[first_sale_months == -1,month_columns ] = -1
+
+    df=df.drop(['-1'], axis=1)
+    df_1=df_1.drop(['-1'], axis=1)
+
+    return df_1
 
 def rename_columns(df, name=None):
     
@@ -193,13 +213,14 @@ def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_su
             rename_columns(batch, path)
             
             init = pd.merge(init, batch, on=['shop_id','item_id'], how = 'right')
-            print(sum(batch.memory_usage()/10**6))
+            
             #del batch
             gc.collect()
 
         if first:
             
             init.merge(item_shop_city_category_sup_category,on=['shop_id','item_id'], how='left').to_csv('data/merged.csv', index=False)
+            print('init memory usege,',sum(init.memory_usage()/10**6))
             first= False
         else:
             init.merge(item_shop_city_category_sup_category,on=['shop_id','item_id'], how='left').to_csv('data/merged.csv', mode='a', index=False, header=False)
@@ -208,19 +229,23 @@ def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_su
 
 
 def prepare_files(merged,data_train, item_shop_city_category_sup_category, alpha=2/(6+1)):
+    print('prepare_files started...')
     group_bys_EMA = [['shop_id','item_category_id'],
                  ['item_id','city'],
                  ['item_id'],
                  ['item_category_id','city']]
     names = []
     for gr in group_bys_EMA:
+        t1 = time.time()
         train = calculate_EMAs_pipeline(merged,
                                          gr, 
                                          alpha=alpha,
                                          item_shop_city_category_sup_category=item_shop_city_category_sup_category,
                                          is_cnt=True)
-        print(train)
+        #print(train)
         train.to_csv(f'data/ema_{'_'.join(gr)}.csv', index=False)
+        t2 = time.time()
+        print(f'EMA calculated for {'_'.join(gr)}.csv; time:', t2-t1)
         names.append(f'ema_{'_'.join(gr)}')
         
     group_bys_lags = [['shop_id','item_id'],
@@ -228,16 +253,20 @@ def prepare_files(merged,data_train, item_shop_city_category_sup_category, alpha
                  ['shop_id']]
     
     for gr in group_bys_lags:
+        t1 = time.time()
         train = calculate_EMAs_pipeline(merged,
                                          gr, 
                                          alpha=1.0,
                                          item_shop_city_category_sup_category=item_shop_city_category_sup_category,
                                          is_cnt=True)
-        print(train)
+        #print(train)
+        
         train.to_csv(f'data/value_{'_'.join(gr)}.csv', index=False)
+        t2 = time.time()
+        print(f'EMA calculated for {'_'.join(gr)}.csv; time:', t2-t1)
         names.append(f'value_{'_'.join(gr)}')
 
-
+    t1 = time.time()
     prices = create_item_shop_data(data_train, column='item_price')
     mean_prices_items = calculate_EMAs_pipeline(prices, #Worng
                                                 ['item_id'], 
@@ -246,31 +275,42 @@ def prepare_files(merged,data_train, item_shop_city_category_sup_category, alpha
                                                 is_cnt=False)
     changes = create_change(mean_prices_items)
     changes.to_csv('data/item_price_change.csv', index=False)
+    t2 = time.time()
+    print(f'price change calculated; time:', t2-t1)
     names += ['item_price_change']
+
+    t1 = time.time()
+    value_item_sales = pd.read_csv('data/value_item_id.csv')
+    diff=calculate_diff(value_item_sales)
+    diff.to_csv('data/item_dbn_diff.csv', index=False)
+    t2 = time.time()
+    print(f'dbn diff calculated; time:', t2-t1)
+    names += ['item_dbn_diff']
     return names
 
 
 def calc_and_write_chunk(merged, data_train,item_shop_city_category_sup_category, chunksize_when_writing):
 
-    alpha=1.0
-
+    alpha=0.0
+    print('prepare_files started..')
     pathes = prepare_files(merged,data_train,item_shop_city_category_sup_category, alpha=alpha)
-
+    print('prepare_files finished')
     shop_city=item_shop_city_category_sup_category[['shop_id','city']].drop_duplicates()
     category_super_category=item_shop_city_category_sup_category[['item_category_id','super_category']].drop_duplicates()
 
     merged=merged.merge(shop_city, on='shop_id', how='left')
     merged=merged.merge(category_super_category, on='item_category_id', how='left')
 
-    #merged['city'] = merged['city'].map(lambda a:a[0])
-    #merged['super_category'] = merged['super_category'].map(lambda a:a[0])
 
     prepare_for_boosting=True
     
     shop_item=item_shop_city_category_sup_category[['shop_id','item_id']].drop_duplicates()
+    print('merge started')
+    t1=time.time()
     if prepare_for_boosting:
         merge_boosting(shop_item, pathes, chunksize_when_writing,item_shop_city_category_sup_category)
-
+    t2=time.time()
+    print('merge ended, time:', t2-t1)
     
 def create_split(past, chunk_size=300000):
     l = len(past)
@@ -303,8 +343,36 @@ def prepare_batches(past, data_train,item_shop_city_category_sup_category, merge
 
         yield merged_ret, item_shop_city_category_sup_category_ret
 
-if __name__ == '__main__':
+   
+def parse_city(shop_name):
+    if shop_name.split()[0] == '!Якутск':
+        return  'Якутск'
 
+    if shop_name.split()[0] == 'Сергиев':
+            return  'Сергиев Посад'
+    else:
+        return shop_name.split()[0]
+
+def create_item_shop_city_category_super_category(shop_city_pairs, merged):
+    shop_city_pairs=pd.DataFrame({'shop_id':shop_city_pairs[:,0],'item_id':shop_city_pairs[:,1]})
+    merged['city'] = merged['shop_name'].apply(parse_city).astype('category').cat.codes.astype(np.uint8)
+    
+    shop_city = merged.groupby('shop_id')['city'].unique().reset_index()
+    shop_city_pairs=shop_city_pairs.merge(shop_city, how='left')
+
+    item_category = merged.groupby('item_id')['item_category_id'].unique().reset_index()
+    shop_city_pairs=shop_city_pairs.merge(item_category, how='left')
+    shop_city_pairs['item_category_id'] = shop_city_pairs['item_category_id'].apply(lambda a:a[0])
+
+    merged['super_category'] = merged['item_category_name'].apply(lambda a: a.split()[0]).astype('category').cat.codes.astype(np.uint8)
+    category_super_category = merged.groupby('item_category_id')['super_category'].unique().reset_index()
+    shop_city_pairs=shop_city_pairs.merge(category_super_category, how='left')
+    shop_city_pairs['super_category'] = shop_city_pairs['super_category'].apply(lambda a:a[0])
+    
+    return merged[['shop_id',	'item_id','item_category_id','city','super_category']]
+
+if __name__ == '__main__':
+    total_time1 = time.time()
     data_train = pd.read_csv('../data_cleaned/data_train.csv')
     item_categories = pd.read_csv('../data_cleaned/item_categories.csv')
     items = pd.read_csv('../data_cleaned/items.csv')
@@ -312,37 +380,39 @@ if __name__ == '__main__':
     test = pd.read_csv('../data_cleaned/test.csv')
     test['date_block_num'] = 34
     data_train = data_train.merge(test, on=['item_id','shop_id','date_block_num'], how='outer').fillna(0)
-    
-    
-    data_train=data_train.reset_index()
-    data_train = data_train.sort_values(by='date_block_num')
-    train = data_train.copy()
-    whole = pd.read_csv('../data.csv')
 
-    merged = create_item_shop_data(data_train)
-    #may be would be better to merge with (shop, item) cartesian
-    
-    shop_city = whole.groupby('shop_id')['city'].unique().reset_index()
-    item_category = whole.groupby('item_id')['item_category_id'].unique().reset_index()
-    category_super_category = whole.groupby('item_category_id')['super_category'].unique().reset_index()
 
-    item_shop_city_category_sup_category = merged.merge(shop_city). \
-    merge(category_super_category)[['shop_id',	'item_id','item_category_id','city','super_category']]
-
-    item_shop_city_category_sup_category['city'] = item_shop_city_category_sup_category['city'].map(lambda a:a[0])
-    item_shop_city_category_sup_category['super_category'] = item_shop_city_category_sup_category['super_category'].map(lambda a:a[0])
-    
-    
-
-    del whole
-    del test
-
+    print('IDs preparation started...')
+    t1 = time.time()
     past = prepare_past_ID_s_CARTESIAN(data_train)[-1][-1]
+    t2 = time.time()
+    print('IDs preparation time:', t2-t1)
 
+
+    t1=time.time()
+    grouped=data_train.groupby(['shop_id','item_id','date_block_num']).agg({'item_price':'mean',
+                                                                    'item_cnt_day':'sum'
+                                                                    })
+    grouped=grouped.reset_index()
+    grouped = grouped.sort_values(by='date_block_num')
+    merged = grouped.merge(items, how='left').merge(item_categories, how='left').merge(shops, how='left')
+    item_shop_city_category_sup_category = create_item_shop_city_category_super_category(past, merged)
+    t2=time.time()
+    print('creating item_shop_city_category_sup_category time:',t2-t1)
+
+
+    #data_train=data_train.reset_index()
+    data_train = data_train.sort_values(by='date_block_num')
+    merged = create_item_shop_data(data_train)
+    
+    del test
+    
     first = True
-    chunk_size=len(past)
-    chunksize_when_writing = 200000
+    chunk_size=len(past)#if chunk_size < len(past), statistics may be misleading
+    chunksize_when_writing = 500000
 
     for batch, item_shop_city_category_sup_category in prepare_batches(past,data_train,item_shop_city_category_sup_category, merged, chunk_size=chunk_size):
         calc_and_write_chunk(batch,data_train,item_shop_city_category_sup_category, chunksize_when_writing)
         first = False
+    total_time2 = time.time()
+    print('total data preparation time,',total_time2-total_time1)

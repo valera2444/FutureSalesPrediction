@@ -14,8 +14,9 @@ from sklearn.linear_model import Lasso
 from sklearn.linear_model import Ridge
 from sklearn.linear_model import LinearRegression
 
+import time
 
-np.random.seed(42)
+#np.random.seed(42)
 
 
 def prepare_past_ID_s(data_train):
@@ -181,13 +182,12 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
     
     """
     
-    
-    
     train = np.random.permutation (shop_item_pairs_WITH_PREV_in_dbn[dbn])#-1?????????
 
     #chunk_num =  len(train)// batch_size if len(train)%batch_size==0  else   len(train) // batch_size + 1#MAY BE NEED TO CORRECT
     chunk_num =  len(train)// batch_size if len(train)>=batch_size else 1#MAY BE NEED TO CORRECT
     for idx in range(chunk_num):#split shop_item_pairs_WITH_PREV_in_dbn into chuncks
+        t1 = time.time()
         l_x=[]
         l_y=[]
         merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read)
@@ -206,7 +206,8 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
         l_x = pd.concat(l_x)
         l_y = pd.concat(l_y)
 
-        
+        t2 = time.time()
+        print('batch creation time [create_batch_train, 212],',t2-t1)
         yield [l_x, l_y]#, test
 
 def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read):
@@ -264,8 +265,7 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
         name = l[0]
         num = int(l[1])
         
-        if 'ema_item_id' in name:
-            continue
+        
         if 'ema' in name:
            if num <= 3:
                 cols.append(col)
@@ -274,6 +274,11 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
             if num <=6 or num == 12:
                 cols.append(col)
                 continue
+
+        if 'value_shop_id_lag' in name:
+            continue
+
+
         if 'value' in name:
             if num <=3:
                 cols.append(col)
@@ -288,7 +293,7 @@ def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_colu
             
         if 'change' in name:
 
-            if num <= 1:
+            if num <= 2:
                 cols.append(col)
                 continue
 
@@ -306,7 +311,7 @@ def append_some_columns(X_train, dbn):
     X_train['month'] = dbn%12
     return X_train
 
-def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
+def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
     
     first=True
     rmse = 0
@@ -315,80 +320,90 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
     
     Y_true_l = []
     preds_l = []
-    for X_train,Y_train  in create_batch_train(batch_size, val_month,shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
+    for epoch in range(epochs):
+        for X_train,Y_train  in create_batch_train(batch_size, val_month,shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
+            #print(f'train on batch {c} started')
+            t1_batch = time.time()
+            t1_data_prep = time.time()
+            #print(f'data preparation on batch {c} started')
+            if X_train is None:
+                print('None')
+                continue
 
-        if X_train is None:
-            print('None')
-            continue
+            if type(model) in [Lasso,SVC]:
+                #print(X_train.columns)
+                X_train.drop('shop_id', inplace=True, axis=1) 
+                X_train.drop('item_category_id', inplace=True, axis=1) 
+                X_train.drop('item_id', inplace=True, axis=1)
+            else:
+                #print(list(X_train.columns))
+            
+                #X_train = X_train.drop('item_id', axis=1)
+                X_train['shop_id'] = X_train['shop_id'].astype('category')
+                X_train['item_category_id'] = X_train['item_category_id'].astype('category')
+                X_train['city'] = X_train['city'].astype('category')
+                X_train['super_category'] = X_train['super_category'].astype('category')
+                
+                pass
+            
+            
+                
+            Y_train = np.clip(Y_train,0,20)
+            
+            if X_train.empty:
+                print('None')
+                continue
+            
+            X_train = make_X_lag_format(X_train, val_month-1)
+            
+            X_train=select_columns(X_train, val_month-1)
+            
+                
+            columns_order=X_train.columns
 
-        if type(model) in [Lasso,SVC]:
-            #print(X_train.columns)
-            X_train.drop('shop_id', inplace=True, axis=1) 
-            X_train.drop('item_category_id', inplace=True, axis=1) 
-            X_train.drop('item_id', inplace=True, axis=1)
-        else:
-            #print(list(X_train.columns))
-        
-            #X_train = X_train.drop('item_id', axis=1)
-            X_train['shop_id'] = X_train['shop_id'].astype('category')
-            X_train['item_category_id'] = X_train['item_category_id'].astype('category')
-            X_train['city'] = X_train['city'].astype('category')
-            X_train['super_category'] = X_train['super_category'].astype('category')
-            
-            pass
-           
-        
-            
-        Y_train = np.clip(Y_train,0,20)
-        
-        if X_train.empty:
-            print('None')
-            continue
-        
-        X_train = make_X_lag_format(X_train, val_month-1)
-        
-        X_train=select_columns(X_train, val_month-1)
-        
-            
-        columns_order=X_train.columns
-
-        if c == 0:
-            print('train columns')
-            #print(X_train.columns)
-        if type(model) in [Lasso,SVC]:
-            model.fit(X_train, Y_train)
-            y_train_pred = model.predict(X_train)
-        
-        elif type(model) == LGBMRegressor:
-            if first:
+            t2_data_prep = time.time()
+            #print(f'data preparation on batch {c} time:',t2_data_prep-t1_data_prep)
+            #print('model fitting started')
+            t1_fit = time.time()
+            if c == 0:
+                pass
+                #print('train columns')
+                #print(X_train.columns)
+            if type(model) in [Lasso,SVC]:
                 model.fit(X_train, Y_train)
-                first=False
-            else:
-                model.fit(X_train, Y_train, init_model=model)
-            y_train_pred = model.predict(X_train, validate_features=True)
+                y_train_pred = model.predict(X_train)
+            
+            elif type(model) == LGBMRegressor:
+                if first:
+                    model.fit(X_train, Y_train)
+                    first=False
+                else:
+                    model.fit(X_train, Y_train, init_model=model)
+                y_train_pred = model.predict(X_train, validate_features=True)
 
-        elif type(model) == xgb.XGBRegressor:
-            if first:
-                model=model.fit(X_train, Y_train)
-                first=False
-            else:
-                print(model.get_booster())
-                #Works not as expected
-                model=model.fit(X_train, Y_train, xgb_model=model.get_booster())
-                
-                
-            y_train_pred = model.predict(X_train)  
+            elif type(model) == xgb.XGBRegressor:
+                if first:
+                    model=model.fit(X_train, Y_train)
+                    first=False
+                else:
+                    print(model.get_booster())
+                    #Works not as expected
+                    model=model.fit(X_train, Y_train, xgb_model=model.get_booster())
+                    
+                    
+                y_train_pred = model.predict(X_train)  
 
-        elif type(model) == RandomForestRegressor:
-            model.fit(X_train, Y_train)
-            y_train_pred = model.predict(X_train)  
-        
-        
-        
-        Y_true_l.append(Y_train)
-        preds_l.append(y_train_pred)
-        
-        c+=1
+            elif type(model) == RandomForestRegressor:
+                model.fit(X_train, Y_train)
+                y_train_pred = model.predict(X_train)  
+            t2_fit = time.time()
+            #print(f'model fitting time on batch {c},',t2_fit - t1_fit)
+            
+            Y_true_l.append(Y_train)
+            preds_l.append(y_train_pred)
+            t2_batch = time.time()
+            print(f'train on batch {c} time,',t2_batch-t1_batch)
+            c+=1
         
     train_rmse = root_mean_squared_error(pd.concat(Y_true_l), np.concat(preds_l))
     print('train_rmse, ',train_rmse)
@@ -467,7 +482,7 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
 
     return val_preds, val_rmse
 
-def validate_ML(model,batch_size,start_val_month, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
+def validate_ML(model,batch_size,start_val_month, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
     """
     Function for validating model
     
@@ -480,11 +495,15 @@ def validate_ML(model,batch_size,start_val_month, shop_item_pairs_in_dbn, shop_i
     
     for val_month in range(start_val_month, 34):
 
+        print(f'month {val_month} started')
+        t1 = time.time()
         
-        print('date_block_num', val_month)
         print('month', val_month%12)
 
-        model,columns_order = train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read)
+        model,columns_order = train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs)
+
+        t2=time.time()
+        print(f'model training on {val_month} time,',t2-t1)
         print('feature importances, ')
         print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
         
@@ -492,8 +511,11 @@ def validate_ML(model,batch_size,start_val_month, shop_item_pairs_in_dbn, shop_i
         #num_trees = len(dump_list)
         
         #print('n_estimators:', model.n_estimators_)
+        t1 = time.time()
+        #print(f'validation on month {val_month} started')
         val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
-        
+        t2 = time.time()
+        print(f'validation time on month {val_month},',t2-t1)
         val_errors.append(val_error)
         val_preds.append(val_pred)
         
@@ -556,21 +578,25 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
     data_test = data_test.merge(PREDICTION,on=['shop_id','item_id'])[['ID','item_cnt_month']]
     return data_test
 
-def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
+def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
     val_errors = []
     
     val_errors=[]
 
-    #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=5, n_estimators = 1,  learning_rate=0.005)
-    #model =RandomForestRegressor(max_depth = 11, n_estimators = 150,n_jobs=8)
-    model,columns_order = train_model(model,batch_size, 34, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read)
-    
+    #print(f'model training on 34 started')
+    t1 = time.time()
+    model,columns_order = train_model(model,batch_size, 34, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs)
+    t2 = time.time()
+    print('training model time,',t2-t1)
     print('Feature importnaces in lgb:')
     
     print(model.feature_names_in_[np.argsort(model.feature_importances_)][::-1])
-    print('n_estimators:', model.n_estimators_)
-    
+    #print('n_estimators:', model.n_estimators_)
+    #print('submission creation started')
+    t1 = time.time()
     data_test = create_submission(model,batch_size,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
+    t2 = time.time()
+    print('submission creation time,', t2-t1)
 
     return data_test
     
@@ -582,37 +608,45 @@ if __name__ == '__main__':
     test['date_block_num'] = 34
     data_train = pd.concat([data_train,test ], ignore_index=True).drop('ID', axis=1).fillna(0)
 
+
     shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn = prepare_past_ID_s_CARTESIAN(data_train)
+
+
     
     
     start_val_month=22
-    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=512, n_estimators = 200,  learning_rate=0.005)
-    #model =RandomForestRegressor(max_depth = 10, n_estimators = 150,n_jobs=8)
-    batch_size=200000
-    batch_size_to_read=200000
+    #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=256, n_estimators = 800,  learning_rate=0.005)
+    #model =RandomForestRegressor(max_depth = 10, n_estimators = 100,n_jobs=8)
+    model = xgb.XGBRegressor(eta=0.005, max_leaves=348,nthread=8,device='gpu', enable_categorical=True,n_estimators=500)
+   
+    batch_size=7000000
+    batch_size_to_read=300000
 
-    is_create_submission=True
-
+    is_create_submission=False
+    epochs=1
 
     if is_create_submission:
-
+        print('submission creation started...')
         submission = create_submission_pipeline(merged=None, 
                                             model=model,
                                             batch_size=batch_size,
                                             shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
                                             shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
-                                            batch_size_to_read=batch_size_to_read
+                                            batch_size_to_read=batch_size_to_read,
+                                            epochs=epochs
                                             )
         submission.to_csv('submission.csv', index=False)
         print(submission.describe())
 
     else:
-
+        print('validation started...')
         val_errors, val_preds = validate_ML(
                                             model=model,
                                             batch_size=batch_size,
                                             start_val_month=start_val_month, 
                                             shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
                                             shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
-                                            batch_size_to_read=batch_size_to_read
+                                            batch_size_to_read=batch_size_to_read,
+                                            epochs=epochs
         )
+        print(val_errors)
