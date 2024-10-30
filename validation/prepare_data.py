@@ -224,7 +224,9 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
     group_bys_EMA = [['shop_id','item_category_id'],
                  ['item_id','city'],
                  ['item_id'],
-                 ['item_category_id','city']]
+                 ['item_category_id','city'],
+                 ['super_category'],
+                 ['shop_id']]
     names = []
     for gr in group_bys_EMA:
         t1 = time.time()
@@ -241,7 +243,8 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
         
     group_bys_lags = [['shop_id','item_id'],
                  ['item_id'],
-                 ['shop_id']]
+                 ['item_category_id']
+                 ]
     
     for gr in group_bys_lags:
         t1 = time.time()
@@ -256,8 +259,9 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
         t2 = time.time()
         print(f'EMA calculated for {'_'.join(gr)}.csv; time:', t2-t1)
         names.append(f'value_{'_'.join(gr)}')
-    """
-    group_bys_lags_prices = [['item_id']]
+    
+    group_bys_lags_prices = [['item_id'],
+                             ['shop_id']]
     
     for gr in group_bys_lags_prices:
         t1 = time.time()
@@ -272,7 +276,7 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
         t2 = time.time()
         print(f'EMA calculated for {'_'.join(gr)}.csv; time:', t2-t1)
         names.append(f'value_price_{'_'.join(gr)}')
-    """
+    
     t1 = time.time()
     #prices = create_pivot_table(data_train,index=['item_id','shop_id'], item_shop_city_category_sup_category=item_shop_city_category_sup_category,column='item_price')
     mean_prices_items = calculate_EMAs_pipeline(data_train, #Worng or not already
@@ -299,7 +303,7 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
 
 def calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunksize_when_writing):
 
-    alpha=1.0
+    alpha=0.0
     print('prepare_files started..')
     pathes = prepare_files(data_train,item_shop_city_category_sup_category, alpha=alpha)
     print('prepare_files finished')

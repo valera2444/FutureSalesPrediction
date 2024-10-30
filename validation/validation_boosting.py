@@ -201,16 +201,22 @@ def select_columns_for_reading(path, dbn):
 
         if 'ema' in name and dbn_diff <= 3:
             cols.append(col)
-        elif 'value_shop_id_item_id' in name and (dbn_diff <= 6 or dbn_diff == 12):
+            continue
+        elif 'value_shop_id_item_id' in name and (dbn_diff <= 3 or dbn_diff == 6 or dbn_diff == 12):
             cols.append(col)
+            continue
         elif 'value_price' in name and dbn_diff <= 1:
             cols.append(col)
+            continue
         elif 'value' in name and dbn_diff <= 3:
             cols.append(col)
+            continue
         elif 'diff' in name and dbn_diff == 1:
             cols.append(col)
+            continue
         elif 'change' in name and dbn_diff <= 2:
             cols.append(col)
+            continue
 
 
     return cols
@@ -370,14 +376,14 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
                 X_train.drop('item_id', inplace=True, axis=1)
                 X_train.drop('city', inplace=True, axis=1)
                 X_train.drop('shop_id', inplace=True, axis=1)
-            else:
+            elif type(model) ==LGBMRegressor:
                 #print(list(X_train.columns))
             
-                #X_train = X_train.drop('item_id', axis=1)
-                #X_train['shop_id'] = X_train['shop_id'].astype('category')
-                #X_train['item_category_id'] = X_train['item_category_id'].astype('category')
-                #X_train['city'] = X_train['city'].astype('category')
-                #X_train['super_category'] = X_train['super_category'].astype('category')
+                X_train = X_train.drop('item_id', axis=1)
+                X_train['shop_id'] = X_train['shop_id'].astype('category')
+                X_train['item_category_id'] = X_train['item_category_id'].astype('category')
+                X_train['city'] = X_train['city'].astype('category')
+                X_train['super_category'] = X_train['super_category'].astype('category')
                 
                 pass
             
@@ -469,13 +475,13 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
             X_val.drop('shop_id', inplace=True, axis=1)
             
 
-        else:
+        elif type(model) ==LGBMRegressor:
             
-            #X_val = X_val.drop('item_id', axis=1)
-            #X_val['shop_id'] = X_val['shop_id'].astype('category')
-            #X_val['item_category_id'] = X_val['item_category_id'].astype('category')
-            #X_val['city'] = X_val['city'].astype('category')
-            #X_val['super_category'] = X_val['super_category'].astype('category')
+            X_val = X_val.drop('item_id', axis=1)
+            X_val['shop_id'] = X_val['shop_id'].astype('category')
+            X_val['item_category_id'] = X_val['item_category_id'].astype('category')
+            X_val['city'] = X_val['city'].astype('category')
+            X_val['super_category'] = X_val['super_category'].astype('category')
                     
             pass
             
@@ -519,7 +525,7 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
 
     return val_preds, val_rmse
 
-def validate_ML(model,batch_size,start_val_month, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
+def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
     """
     Function for validating model
     
@@ -530,7 +536,7 @@ def validate_ML(model,batch_size,start_val_month, shop_item_pairs_in_dbn, shop_i
     val_preds=[]
     
     
-    for val_month in range(start_val_month, 34):
+    for val_month in val_monthes:
 
         print(f'month {val_month} started')
         t1 = time.time()
@@ -567,6 +573,8 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
     PREDICTION = pd.DataFrame(columns=['shop_id','item_id','item_cnt_month'])
     Y_true_l=[]
     for X_val, Y_val in create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn,batch_size_to_read):
+        shop_id = X_val.shop_id
+        item_id = X_val.item_id
         if type(model) in [sklearn.linear_model._coordinate_descent.Lasso,
                           SVC]:
             
@@ -575,13 +583,13 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
             X_val.drop('item_id', inplace=True, axis=1) 
             
 
-        else:
+        elif type(model) ==LGBMRegressor:
             
-            #X_val = X_val.drop('item_id', axis=1)
-            #X_val['shop_id'] = X_val['shop_id'].astype('category')
-            #X_val['item_category_id'] = X_val['item_category_id'].astype('category')
-            #X_val['city'] = X_val['city'].astype('category')
-            #X_val['super_category'] = X_val['super_category'].astype('category')
+            X_val = X_val.drop('item_id', axis=1)
+            X_val['shop_id'] = X_val['shop_id'].astype('category')
+            X_val['item_category_id'] = X_val['item_category_id'].astype('category')
+            X_val['city'] = X_val['city'].astype('category')
+            X_val['super_category'] = X_val['super_category'].astype('category')
                     
             pass
 
@@ -606,7 +614,7 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
         Y_true_l.append(Y_val)
         
         
-        app = pd.DataFrame({'item_id':X_val.item_id,'shop_id': X_val.shop_id, 'item_cnt_month':y_val_pred})
+        app = pd.DataFrame({'item_id':item_id,'shop_id': shop_id, 'item_cnt_month':y_val_pred})
         PREDICTION = pd.concat([PREDICTION, app],ignore_index=True)
 
     #val_rmse = root_mean_squared_error(PREDICTION['item_cnt_month'], np.concat(Y_true_l))
@@ -651,15 +659,16 @@ if __name__ == '__main__':
 
     
     
-    start_val_month=22
-    #model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=750, n_estimators = 1700,  learning_rate=0.001)
+    #start_val_month=22
+    val_monthes=[22,25,30,33]
+    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=256, n_estimators = 500,  learning_rate=0.005)
     #model =RandomForestRegressor(max_depth = 10, n_estimators = 100,n_jobs=8)
-    model = xgb.XGBRegressor(eta=0.001, max_leaves=640,nthread=8,device='gpu', enable_categorical=True,n_estimators=5000)
+    #model = xgb.XGBRegressor(eta=0.001, max_leaves=640,nthread=8,device='gpu', enable_categorical=True,n_estimators=5000)
    
     batch_size=70000000
     batch_size_to_read=200000000
 
-    is_create_submission=True
+    is_create_submission=False
     epochs=1
 
     if is_create_submission:
@@ -680,7 +689,7 @@ if __name__ == '__main__':
         val_errors, val_preds = validate_ML(
                                             model=model,
                                             batch_size=batch_size,
-                                            start_val_month=start_val_month, 
+                                            val_monthes=val_monthes, 
                                             shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
                                             shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
                                             batch_size_to_read=batch_size_to_read,
