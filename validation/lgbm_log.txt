@@ -1,0 +1,170 @@
+A new study created in RDB with name: no-name-0ca994a1-f272-49cc-bb0c-4cfca8e8854a
+Trial 0 finished with value: 0.9903905779756865 and parameters: {'lr': 0.007347983956389967, 'num_leaves': 928, 'n_estimators': 750}. Best is trial 0 with value: 0.9903905779756865.
+Trial 1 finished with value: 0.9832878742106471 and parameters: {'lr': 0.02583017211276221, 'num_leaves': 160, 'n_estimators': 150}. Best is trial 1 with value: 0.9832878742106471.
+Trial 2 finished with value: 1.0209796556140234 and parameters: {'lr': 0.42068540531475773, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 1 with value: 0.9832878742106471.
+Trial 3 finished with value: 0.9907338822761048 and parameters: {'lr': 0.07649288013075121, 'num_leaves': 160, 'n_estimators': 750}. Best is trial 1 with value: 0.9832878742106471.
+Trial 4 finished with value: 1.0048645451990892 and parameters: {'lr': 0.13857261298184484, 'num_leaves': 928, 'n_estimators': 600}. Best is trial 1 with value: 0.9832878742106471.
+Trial 5 finished with value: 0.9865850102806356 and parameters: {'lr': 0.013423603937159396, 'num_leaves': 416, 'n_estimators': 750}. Best is trial 1 with value: 0.9832878742106471.
+Trial 6 finished with value: 0.987548029959569 and parameters: {'lr': 0.015504667103813803, 'num_leaves': 416, 'n_estimators': 600}. Best is trial 1 with value: 0.9832878742106471.
+Trial 7 pruned. Trial was pruned at iteration 188.
+Trial 8 pruned. Trial was pruned at iteration 284.
+Trial 9 finished with value: 0.9911579040887922 and parameters: {'lr': 0.006644780524801858, 'num_leaves': 160, 'n_estimators': 300}. Best is trial 1 with value: 0.9832878742106471.
+Trial 10 finished with value: 0.9866476011058487 and parameters: {'lr': 0.02647615643493137, 'num_leaves': 672, 'n_estimators': 150}. Best is trial 1 with value: 0.9832878742106471.
+Trial 11 finished with value: 0.9862655460066536 and parameters: {'lr': 0.01552901980021368, 'num_leaves': 544, 'n_estimators': 150}. Best is trial 1 with value: 0.9832878742106471.
+Trial 12 finished with value: 0.9847003579534293 and parameters: {'lr': 0.020249455194113967, 'num_leaves': 672, 'n_estimators': 150}. Best is trial 1 with value: 0.9832878742106471.
+Trial 13 pruned. Trial was pruned at iteration 64.
+Trial 14 finished with value: 0.9865952605576144 and parameters: {'lr': 0.028951004875661924, 'num_leaves': 672, 'n_estimators': 150}. Best is trial 1 with value: 0.9832878742106471.
+Trial 15 pruned. Trial was pruned at iteration 339.
+Trial 16 finished with value: 0.9842985112862942 and parameters: {'lr': 0.009990748176479181, 'num_leaves': 544, 'n_estimators': 300}. Best is trial 1 with value: 0.9832878742106471.
+Trial 17 finished with value: 1.0014019455887098 and parameters: {'lr': 0.005057574840005023, 'num_leaves': 288, 'n_estimators': 300}. Best is trial 1 with value: 0.9832878742106471.
+Trial 18 finished with value: 0.9879693191486701 and parameters: {'lr': 0.011276970694937891, 'num_leaves': 544, 'n_estimators': 450}. Best is trial 1 with value: 0.9832878742106471.
+Trial 19 finished with value: 0.9830478988573628 and parameters: {'lr': 0.009927559578648437, 'num_leaves': 288, 'n_estimators': 300}. Best is trial 19 with value: 0.9830478988573628.
+Trial 20 finished with value: 0.9843735941833911 and parameters: {'lr': 0.056705388519923815, 'num_leaves': 160, 'n_estimators': 150}. Best is trial 19 with value: 0.9830478988573628.
+Trial 21 finished with value: 0.9877913389077735 and parameters: {'lr': 0.009202358023590342, 'num_leaves': 288, 'n_estimators': 300}. Best is trial 19 with value: 0.9830478988573628.
+Trial 22 finished with value: 0.9842670506501046 and parameters: {'lr': 0.009231336925717384, 'num_leaves': 416, 'n_estimators': 300}. Best is trial 19 with value: 0.9830478988573628.
+Trial 23 finished with value: 0.9848145865399364 and parameters: {'lr': 0.005193294074443275, 'num_leaves': 288, 'n_estimators': 450}. Best is trial 19 with value: 0.9830478988573628.
+Trial 24 finished with value: 0.987938714560903 and parameters: {'lr': 0.034555771691942065, 'num_leaves': 416, 'n_estimators': 150}. Best is trial 19 with value: 0.9830478988573628.
+Trial 25 finished with value: 0.9846646532245948 and parameters: {'lr': 0.01854244754441335, 'num_leaves': 160, 'n_estimators': 300}. Best is trial 19 with value: 0.9830478988573628.
+Trial 26 finished with value: 0.9810547335351044 and parameters: {'lr': 0.008146709861985612, 'num_leaves': 32, 'n_estimators': 450}. Best is trial 26 with value: 0.9810547335351044.
+Trial 27 finished with value: 0.9794121768158482 and parameters: {'lr': 0.007135080786768116, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 27 with value: 0.9794121768158482.
+Trial 28 finished with value: 0.9824669632434871 and parameters: {'lr': 0.006177118696795706, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 27 with value: 0.9794121768158482.
+Trial 29 finished with value: 0.9799366725956443 and parameters: {'lr': 0.006698255316854015, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 27 with value: 0.9794121768158482.
+Trial 30 finished with value: 0.9777020201478885 and parameters: {'lr': 0.00773786866991116, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 30 with value: 0.9777020201478885.
+Trial 31 finished with value: 0.978229522325027 and parameters: {'lr': 0.007315095358130953, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 30 with value: 0.9777020201478885.
+Trial 32 finished with value: 0.9764656963136212 and parameters: {'lr': 0.006879070737977554, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 33 pruned. Trial was pruned at iteration 649.
+Trial 34 finished with value: 0.9850357954853459 and parameters: {'lr': 0.007405431542875885, 'num_leaves': 160, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 35 pruned. Trial was pruned at iteration 98.
+Trial 36 finished with value: 0.9827664294978269 and parameters: {'lr': 0.005514378597417817, 'num_leaves': 160, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 37 pruned. Trial was pruned at iteration 557.
+Trial 38 finished with value: 0.9823149180411241 and parameters: {'lr': 0.007212770464140976, 'num_leaves': 160, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 39 pruned. Trial was pruned at iteration 692.
+Trial 40 pruned. Trial was pruned at iteration 114.
+Trial 41 finished with value: 0.9811256426154126 and parameters: {'lr': 0.007484577187459861, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 42 finished with value: 0.9796410105996869 and parameters: {'lr': 0.0063090657609672475, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 43 finished with value: 0.9844150279264846 and parameters: {'lr': 0.017203606570528534, 'num_leaves': 160, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 44 finished with value: 0.9873188293483207 and parameters: {'lr': 0.006075381302543836, 'num_leaves': 800, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 45 pruned. Trial was pruned at iteration 32.
+Trial 46 finished with value: 0.9775954324936998 and parameters: {'lr': 0.00870961544327131, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 47 finished with value: 0.9860199450555479 and parameters: {'lr': 0.011348154030322258, 'num_leaves': 160, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 48 finished with value: 0.9783460193061879 and parameters: {'lr': 0.008896829487977646, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 49 finished with value: 0.9823208352652187 and parameters: {'lr': 0.008369012396526258, 'num_leaves': 160, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 50 pruned. Trial was pruned at iteration 413.
+Trial 51 finished with value: 0.9775489275539551 and parameters: {'lr': 0.014397429686094903, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 52 finished with value: 0.9779239603106219 and parameters: {'lr': 0.010540939875810309, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 53 pruned. Trial was pruned at iteration 545.
+Trial 54 pruned. Trial was pruned at iteration 560.
+Trial 55 pruned. Trial was pruned at iteration 669.
+Trial 56 pruned. Trial was pruned at iteration 800.
+Trial 57 finished with value: 0.9825515924155727 and parameters: {'lr': 0.005024573318439423, 'num_leaves': 160, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 58 finished with value: 0.9778991092606262 and parameters: {'lr': 0.009759880563298113, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 59 finished with value: 0.9816677924529862 and parameters: {'lr': 0.009911281570681059, 'num_leaves': 160, 'n_estimators': 450}. Best is trial 32 with value: 0.9764656963136212.
+Trial 60 pruned. Trial was pruned at iteration 343.
+Trial 61 finished with value: 0.9775736051027014 and parameters: {'lr': 0.008681741780560014, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 62 finished with value: 0.9777875060382342 and parameters: {'lr': 0.008610646377750072, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 63 finished with value: 0.9783486571847755 and parameters: {'lr': 0.008453252118115307, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 64 finished with value: 0.9832050334352033 and parameters: {'lr': 0.00872528297361531, 'num_leaves': 160, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 65 finished with value: 0.9903440721042571 and parameters: {'lr': 0.005825591133410138, 'num_leaves': 32, 'n_estimators': 450}. Best is trial 32 with value: 0.9764656963136212.
+Trial 66 pruned. Trial was pruned at iteration 108.
+Trial 67 pruned. Trial was pruned at iteration 416.
+Trial 68 pruned. Trial was pruned at iteration 607.
+Trial 69 pruned. Trial was pruned at iteration 270.
+Trial 70 finished with value: 0.9866732482027464 and parameters: {'lr': 0.014858825961010269, 'num_leaves': 288, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 71 pruned. Trial was pruned at iteration 730.
+Trial 72 finished with value: 0.978894236076567 and parameters: {'lr': 0.007943992310689828, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 73 finished with value: 0.9784636956648632 and parameters: {'lr': 0.010724791250064744, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 74 finished with value: 0.9800724043445351 and parameters: {'lr': 0.009519011035203353, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 75 finished with value: 0.9792332515762388 and parameters: {'lr': 0.006647734625945757, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 76 finished with value: 0.9833097559412227 and parameters: {'lr': 0.005810780115595912, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 77 finished with value: 0.9844252035991449 and parameters: {'lr': 0.006805501607170738, 'num_leaves': 160, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 78 finished with value: 0.9782733401859559 and parameters: {'lr': 0.012511131876812102, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 79 finished with value: 0.981985206797939 and parameters: {'lr': 0.008126158550585549, 'num_leaves': 160, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 80 pruned. Trial was pruned at iteration 513.
+Trial 81 finished with value: 0.9786740596381381 and parameters: {'lr': 0.007131262648422528, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 82 pruned. Trial was pruned at iteration 761.
+Trial 83 finished with value: 0.9803950996584344 and parameters: {'lr': 0.007653708528106283, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 84 pruned. Trial was pruned at iteration 669.
+Trial 85 finished with value: 0.9827600316064956 and parameters: {'lr': 0.005586849849108703, 'num_leaves': 160, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 86 pruned. Trial was pruned at iteration 669.
+Trial 87 finished with value: 0.9853037467604416 and parameters: {'lr': 0.009021567715366025, 'num_leaves': 160, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 88 finished with value: 0.9864680348777043 and parameters: {'lr': 0.006444169599462753, 'num_leaves': 544, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 89 finished with value: 0.9783833116533512 and parameters: {'lr': 0.007839336594697547, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 90 pruned. Trial was pruned at iteration 692.
+Trial 91 finished with value: 0.9788133745405156 and parameters: {'lr': 0.012975286896038175, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 92 finished with value: 0.9795270457098787 and parameters: {'lr': 0.010080167898724618, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 93 finished with value: 0.9771012929069013 and parameters: {'lr': 0.011775716327560201, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 94 finished with value: 0.9779849816639183 and parameters: {'lr': 0.017727811443171954, 'num_leaves': 32, 'n_estimators': 450}. Best is trial 32 with value: 0.9764656963136212.
+Trial 95 pruned. Trial was pruned at iteration 427.
+Trial 96 finished with value: 0.9854869680475286 and parameters: {'lr': 0.031102738706193896, 'num_leaves': 160, 'n_estimators': 450}. Best is trial 32 with value: 0.9764656963136212.
+Trial 97 pruned. Trial was pruned at iteration 375.
+Trial 98 finished with value: 0.979366894630624 and parameters: {'lr': 0.008752029124427392, 'num_leaves': 32, 'n_estimators': 450}. Best is trial 32 with value: 0.9764656963136212.
+Trial 99 pruned. Trial was pruned at iteration 552.
+Trial 100 pruned. Trial was pruned at iteration 379.
+Trial 101 pruned. Trial was pruned at iteration 555.
+Trial 102 pruned. Trial was pruned at iteration 580.
+Trial 103 pruned. Trial was pruned at iteration 144.
+Trial 104 finished with value: 0.9795752993836272 and parameters: {'lr': 0.010083373187250106, 'num_leaves': 32, 'n_estimators': 450}. Best is trial 32 with value: 0.9764656963136212.
+Trial 105 finished with value: 0.9775602263474967 and parameters: {'lr': 0.007097141586923405, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 106 finished with value: 0.9795104608170403 and parameters: {'lr': 0.006353605764339627, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 107 pruned. Trial was pruned at iteration 790.
+Trial 108 finished with value: 0.9834253956132786 and parameters: {'lr': 0.005423232787365085, 'num_leaves': 160, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 109 pruned. Trial was pruned at iteration 727.
+Trial 110 pruned. Trial was pruned at iteration 400.
+Trial 111 finished with value: 0.9775506975878052 and parameters: {'lr': 0.007924781798167855, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 112 finished with value: 0.9770435398604113 and parameters: {'lr': 0.008220571986491095, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 113 finished with value: 0.9784224833637438 and parameters: {'lr': 0.008097775774607097, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 114 finished with value: 0.9787152069059735 and parameters: {'lr': 0.008548357050192922, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 115 finished with value: 0.9790694961968808 and parameters: {'lr': 0.006878543702032075, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 116 finished with value: 0.97731049567276 and parameters: {'lr': 0.007495966104500981, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 117 finished with value: 0.9849792211821479 and parameters: {'lr': 0.005886953082963698, 'num_leaves': 416, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 118 finished with value: 0.9782857457935018 and parameters: {'lr': 0.007431865708883793, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 119 finished with value: 0.981722641202062 and parameters: {'lr': 0.006556633753615183, 'num_leaves': 32, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 120 pruned. Trial was pruned at iteration 135.
+Trial 121 finished with value: 0.9779933987283714 and parameters: {'lr': 0.010699835131286209, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 122 pruned. Trial was pruned at iteration 738.
+Trial 123 finished with value: 0.9773047669588645 and parameters: {'lr': 0.008273715267089912, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 124 finished with value: 0.978816159260825 and parameters: {'lr': 0.007860195686533499, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 125 finished with value: 0.9794431839480598 and parameters: {'lr': 0.005045085541488373, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 126 finished with value: 0.9776989444626359 and parameters: {'lr': 0.008543378781428388, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 127 finished with value: 0.9828960611650684 and parameters: {'lr': 0.006086261954399464, 'num_leaves': 160, 'n_estimators': 600}. Best is trial 32 with value: 0.9764656963136212.
+Trial 128 finished with value: 0.9790279132590234 and parameters: {'lr': 0.008660644382792623, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 129 finished with value: 0.9777492823843682 and parameters: {'lr': 0.007032017059608059, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 130 finished with value: 0.9773064874978608 and parameters: {'lr': 0.007116373223371742, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 131 finished with value: 0.9795536331249082 and parameters: {'lr': 0.007424992441387765, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 132 finished with value: 0.9799305629128413 and parameters: {'lr': 0.007173955846566056, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 133 finished with value: 0.9796162409422448 and parameters: {'lr': 0.006742280286205213, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 134 finished with value: 0.9794558107062542 and parameters: {'lr': 0.005516440556162019, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 135 finished with value: 0.9772970496299322 and parameters: {'lr': 0.0082126636038151, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 136 pruned. Trial was pruned at iteration 845.
+Trial 137 pruned. Trial was pruned at iteration 862.
+Trial 138 finished with value: 0.9783254816172318 and parameters: {'lr': 0.006258109469829302, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 139 finished with value: 0.98367986394438 and parameters: {'lr': 0.00806787539526894, 'num_leaves': 160, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 140 pruned. Trial was pruned at iteration 526.
+Trial 141 finished with value: 0.9776511657945481 and parameters: {'lr': 0.006894344818180357, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 142 pruned. Trial was pruned at iteration 889.
+Trial 143 finished with value: 0.9793088752465596 and parameters: {'lr': 0.006151754047101006, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 144 finished with value: 0.9778586083605473 and parameters: {'lr': 0.0067903276390304445, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 145 finished with value: 0.9772413813374752 and parameters: {'lr': 0.007711130922765957, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 146 finished with value: 0.9802836421387368 and parameters: {'lr': 0.010206811634434109, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 147 finished with value: 0.9780854051559338 and parameters: {'lr': 0.008247850974853362, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 148 finished with value: 0.978233971906497 and parameters: {'lr': 0.0056500894527940024, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 149 pruned. Trial was pruned at iteration 827.
+Trial 150 finished with value: 0.9784926557395682 and parameters: {'lr': 0.007486101141347006, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 151 finished with value: 0.9787473877581577 and parameters: {'lr': 0.007781863564611339, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 152 finished with value: 0.9780723969995511 and parameters: {'lr': 0.0067483935202751226, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 153 finished with value: 0.9787588494260572 and parameters: {'lr': 0.008505909179623643, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 154 finished with value: 0.9782663807507815 and parameters: {'lr': 0.009599167510129859, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 155 finished with value: 0.978881898006929 and parameters: {'lr': 0.006137570636889322, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 156 finished with value: 0.9785143750925273 and parameters: {'lr': 0.007447057883701492, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 157 pruned. Trial was pruned at iteration 651.
+Trial 158 finished with value: 0.9781477284170642 and parameters: {'lr': 0.008827358557408729, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 159 finished with value: 0.9783201841169694 and parameters: {'lr': 0.006941423817694658, 'num_leaves': 32, 'n_estimators': 750}. Best is trial 32 with value: 0.9764656963136212.
+Trial 160 finished with value: 0.9854433463130775 and parameters: {'lr': 0.008132922437733779, 'num_leaves': 416, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 161 finished with value: 0.979080460456323 and parameters: {'lr': 0.007155596871286677, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 162 finished with value: 0.9780219847918837 and parameters: {'lr': 0.006317572649354275, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 163 finished with value: 0.979375672988079 and parameters: {'lr': 0.006959865901488096, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 164 finished with value: 0.9794135950405757 and parameters: {'lr': 0.007708683981763346, 'num_leaves': 32, 'n_estimators': 900}. Best is trial 32 with value: 0.9764656963136212.
+Trial 165 failed with parameters: {'lr': 0.005488670878953109, 'num_leaves': 32, 'n_estimators': 900} because of the following error: KeyboardInterrupt().
+
+
+val_monthes=[23,26,33]
