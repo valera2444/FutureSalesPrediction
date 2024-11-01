@@ -8,10 +8,10 @@ FIRST_N_MONTH_TO_DROP = 6
 
 def prepare_past_ID_s_CARTESIAN(data_train):
     """
-    Prepares unique (shop, item) pairs in a Cartesian product format over time blocks.
+    Prepares cartesian product of unique shop, item pairs over time blocks.
     
     Args:
-        data_train (pd.DataFrame): Training data with 'shop_id', 'item_id', and 'date_block_num' columns.
+        data_train (pd.DataFrame): Training data with 'shop_id', 'item_id', 'date_block_num' and some more columns.
 
     Returns:
         tuple: A tuple containing:
@@ -19,7 +19,6 @@ def prepare_past_ID_s_CARTESIAN(data_train):
             - shop_item_pairs_WITH_PREV_in_dbn (np.array[np.array[np.array[int]]]): Accumulated cartesian products for each time block up since 0 to the current block.
     """
     data_train['shop_item'] = [tuple([shop, item]) for shop, item in zip(data_train['shop_id'], data_train['item_id'])]
-    #34 block contains A LOT more shop_item than others
     shop_item_pairs_in_dbn = data_train.groupby('date_block_num')['shop_item'].apply(np.unique)
     data_train = data_train.drop(['shop_item'], axis=1)
     
@@ -81,13 +80,13 @@ import time
 
 def create_pivot_table(data,index, item_shop_city_category_sup_category,column='item_cnt_day'):
     """
-    Creates a pivot table with metrics aggregated by specified index and month blocks.
+    Creates a pivot table with column aggregated by specified index.
     
     Args:
-        data (pd.DataFrame): Data with relevant metrics and date blocks.
+        data (pd.DataFrame): Data with relevant columns and date blocks.
         index (list of str): List of columns to group data by in the pivot table.
         item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to return data with all requierd [shop, item] pairs.
-        column (str): Metric to aggregate; default is 'item_cnt_day'.
+        column (str): columns to aggregate; default is 'item_cnt_day'.
 
     Returns:
         pd.DataFrame: Merged pivot table with specified index columns.
@@ -180,7 +179,7 @@ def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_categ
     
 def calculate_diff(df):
     """
-    Calculates time difference since first sale occurrence for each item in each month.
+    Calculates time difference since first occurrence for each item in each month.
     
     Args:
         df (pd.DataFrame): Data table with month columns for calculating time differences.
@@ -238,15 +237,15 @@ def rename_columns(df, name=None):
 
 
 
-def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_sup_category=None):
+def merge_boosting(item_shops, names, chunksize=None,item_shop_city_category_sup_category=None):
     """
     Merges data from multiple sources into a single CSV file, handling large datasets in chunks.
     
     Args:
         item_shops (pd.DataFrame): Data with unique item-shop pairs.
-        pathes (list of str): List of file paths to read and merge data from.
+        names (list of str): List of file names of files to read and merge data from.
         chunksize (int): Size of chunks for data processing.
-        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to return data with all requierd [shop, item] pairs.
+        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to write data with all requierd [shop, item] pairs.
     """
     def create_batch_for_writing(file_length, chunksize):
         """
@@ -256,7 +255,7 @@ def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_su
             chunksize (int): _description_
 
         Returns:
-            list[list[int,int]]: indexes for batches in files from pathes
+            list[list[int,int]]: indexes for batches in files from panamesthes
         """
         l = file_length
         
@@ -276,7 +275,7 @@ def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_su
     
     for idx in idxs:
         first_inner = True
-        for path in pathes:
+        for path in names:
             
             batch=pd.read_csv(f'data/{path}.csv',skiprows=range(1,idx[0] + 1),nrows=idx[1] - idx[0])
             if first_inner:
@@ -304,7 +303,7 @@ def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_su
         else:
             init.merge(item_shop_city_category_sup_category,on=['shop_id','item_id'], how='left').to_csv('data/merged.csv', mode='a', index=False, header=False)
 
-    print('names in merged,',pathes )
+    print('names in merged,',names )
 
 
 def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1)):
@@ -413,13 +412,13 @@ def calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunks
     
     Args:
         data_train (pd.DataFrame): Training data. Columns are shop_id, item_id, city, item_category_id, super_categoty, item_cnt_day, item_price
-        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to return data with all requierd [shop, item] pairs.
+        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to calculate and write data with all requierd [shop, item] pairs.
         chunksize_when_writing (int): Chunk size for reading data from created csv's and writing data into common csv
     """
 
     alpha=0.0
     print('prepare_files started..')
-    pathes = prepare_files(data_train,item_shop_city_category_sup_category, alpha=alpha)
+    names = prepare_files(data_train,item_shop_city_category_sup_category, alpha=alpha)
     print('prepare_files finished')
     
     prepare_for_boosting=True
@@ -428,7 +427,7 @@ def calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunks
     print('merge started')
     t1=time.time()
     if prepare_for_boosting:
-        merge_boosting(shop_item, pathes, chunksize_when_writing,item_shop_city_category_sup_category)
+        merge_boosting(shop_item, names, chunksize_when_writing,item_shop_city_category_sup_category)
     t2=time.time()
     print('merge ended, time:', t2-t1)
     
@@ -462,7 +461,7 @@ def prepare_batches(past,item_shop_city_category_sup_category, chunk_size):
         chunk_size (int): Size of each batch.
 
     Yields:
-        pd.DataFrame: Batch of merged data.
+        pd.DataFrame: Batch of merged data(only item,shop,city,category,sup_category columns)
     """
     l = len(past)
     idxs = create_split(past, chunk_size=chunk_size)
@@ -549,6 +548,7 @@ if __name__ == '__main__':
     grouped=data_train.groupby(['shop_id','item_id','date_block_num']).agg({'item_price':'mean',
                                                                     'item_cnt_day':'sum'
                                                                     })
+    #Note that there is no rename of item_cnt_day and item_price columns
     grouped=grouped.reset_index()
     grouped = grouped.sort_values(by='date_block_num')
     merged = grouped.merge(items, how='left').merge(item_categories, how='left').merge(shops, how='left')

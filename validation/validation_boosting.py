@@ -58,7 +58,8 @@ def prepare_past_ID_s_CARTESIAN(data_train):
     Returns:
         tuple: A tuple containing:
             - shop_item_pairs_in_dbn (pd.DataFrame): Cartesian product of shop_id and item_id columns from data_train for each 'date_block_num'.
-            - shop_item_pairs_WITH_PREV_in_dbn:np.array[np.array[np.array[int]]] Accumulated cartesian products for each time block up since 0 to the current block.
+            - shop_item_pairs_WITH_PREV_in_dbn:np.array[np.array[np.array[int]]] Accumulated cartesian products for each time block up since 0 to the previous block. This name may confuse, as it contains only previous information
+            
     """
     data_train['shop_item'] = [tuple([shop, item]) for shop, item in zip(data_train['shop_id'], data_train['item_id'])]
     #34 block contains A LOT more shop_item than others
@@ -157,7 +158,8 @@ def prepare_val(data, valid ):
 
 def prepare_data_train_boosting(data, valid, dbn):
     """
-    Prepares training data for boosting models by selecting required columns from csv.
+    Prepares validation data for boosting models by selecting required columns and selecting only required (shop,item) pairs
+    This function was used before reading only part of columns from csv, but still be used to validate everything is right.
 
     Args:
         data (pd.DataFrame): Training data.
@@ -195,8 +197,8 @@ def prepare_data_train_boosting(data, valid, dbn):
 
 def prepare_data_validation_boosting(data, valid, dbn):
     """
-    Prepares validation data for boosting models by selecting required columns from csv.
-
+    Prepares validation data for boosting models by selecting required columns and selecting only required (shop,item) pairs
+    This function was used before reading only part of columns from csv, but still be used to validate everything is right.
     Args:
         data (pd.DataFrame): Validation data.
         valid (np.array[np.array[int]]): shop, item pairs to include in a batch.
@@ -300,7 +302,7 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
     train = np.random.permutation (shop_item_pairs_WITH_PREV_in_dbn[dbn])
 
     chunk_num =  len(train)// batch_size if len(train)>=batch_size else 1
-    columns = select_columns_for_reading(SOURCE_PATH, dbn-1)
+    columns = select_columns_for_reading(SOURCE_PATH, dbn-1)#-1 because this dbn is for validation, dbn for train is 1 less
     for idx in range(chunk_num):#splits shop_item_pairs_WITH_PREV_in_dbn into chuncks
         t1 = time.time()
         l_x=[]
@@ -450,7 +452,7 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
                 print('None')
                 continue
             
-            X_train = make_X_lag_format(X_train, val_month-1)
+            X_train = make_X_lag_format(X_train, val_month-1)#-1 because this dbn is for validation, dbn for train is 1 less
             
             #X_train=select_columns(X_train, val_month-1)
             
