@@ -20,6 +20,9 @@ import time
 
 SOURCE_PATH = 'data/merged.csv'
 def prepare_past_ID_s(data_train):
+    """
+    This function doesn't used
+    """
     data_train['shop_item'] = [tuple([shop, item]) for shop, item in zip(data_train['shop_id'], data_train['item_id'])]
     #34 block contains A LOT more shop_item than others
     shop_item_pairs_in_dbn = data_train.groupby('date_block_num')['shop_item'].apply(np.unique)
@@ -46,6 +49,17 @@ def prepare_past_ID_s(data_train):
     return shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn
 
 def prepare_past_ID_s_CARTESIAN(data_train):
+    """
+    Prepares unique (shop, item) pairs in a Cartesian product format over time blocks.
+    
+    Args:
+        data_train (pd.DataFrame): Training data with 'shop_id', 'item_id', and 'date_block_num' columns.
+
+    Returns:
+        tuple: A tuple containing:
+            - shop_item_pairs_in_dbn (pd.DataFrame): Cartesian product of shop_id and item_id columns from data_train for each 'date_block_num'.
+            - shop_item_pairs_WITH_PREV_in_dbn:np.array[np.array[np.array[int]]] Accumulated cartesian products for each time block up since 0 to the current block.
+    """
     data_train['shop_item'] = [tuple([shop, item]) for shop, item in zip(data_train['shop_id'], data_train['item_id'])]
     #34 block contains A LOT more shop_item than others
     shop_item_pairs_in_dbn = data_train.groupby('date_block_num')['shop_item'].apply(np.unique)
@@ -82,8 +96,14 @@ def prepare_past_ID_s_CARTESIAN(data_train):
 
 def make_X_lag_format(data, dbn):
     """
-    transform X to lag format
-    columns with dbn in names become lag_0, dbn-1 - lag_1 etc.
+    Converts columns with date block numbers to a lag format for specified date block number.
+
+    Args:
+        data (pd.DataFrame): Data containing columns with date block numbers. Columns must have format name$dbn
+        dbn (int): Current date block number for calculating lags.
+
+    Returns:
+        pd.DataFrame: Data with lagged columns for the specified date block number. Columns will have format name_lag;{lag number}
     """
     
     lag_cols = defaultdict()
@@ -101,7 +121,14 @@ def make_X_lag_format(data, dbn):
 
 def prepare_train(data, valid ):
     """
-    returns one batch of merged data with required IDs from valid
+    Filters training data to include only the specified shop-item pairs.
+
+    Args:
+        data (pd.DataFrame): Training data to be filtered.
+        valid np.array[np.array[int]]: shop, item pairs to include in a batch.
+
+    Returns:
+        pd.DataFrame: Filtered data with only specified shop-item pairs.
     """
     #print(data)
     valid_shop_item = valid
@@ -114,7 +141,13 @@ def prepare_train(data, valid ):
 
 def prepare_val(data, valid ):
     """
-    returns one batch of merged data with required IDs from valid
+    Filters validation data to include only specified shop-item pairs.
+
+    Args:
+        data (pd.DataFrame): Validation data to be filtered.
+        valid (np.array[np.array[int]]): shop, item pairs to include in a batch.
+    Returns:
+        pd.DataFrame: Filtered data for validation with only specified shop-item pairs.
     """
     
     df = pd.DataFrame({'item_id':valid[:,1],'shop_id':valid[:,0]} )
@@ -124,7 +157,17 @@ def prepare_val(data, valid ):
 
 def prepare_data_train_boosting(data, valid, dbn):
     """
-    
+    Prepares training data for boosting models by selecting required columns from csv.
+
+    Args:
+        data (pd.DataFrame): Training data.
+        valid (np.array[np.array[int]]): shop, item pairs to include in a batch.
+        dbn (int): Current date block number.
+
+    Returns:
+        tuple: 
+            - X (pd.DataFrame): Features for training.
+            - Y (pd.Series): Target variable for training.
     """
     train = prepare_train (data, valid)
     lag_cols = []
@@ -152,7 +195,17 @@ def prepare_data_train_boosting(data, valid, dbn):
 
 def prepare_data_validation_boosting(data, valid, dbn):
     """
-    
+    Prepares validation data for boosting models by selecting required columns from csv.
+
+    Args:
+        data (pd.DataFrame): Validation data.
+        valid (np.array[np.array[int]]): shop, item pairs to include in a batch.
+        dbn (int): Current date block number.
+
+    Returns:
+        tuple: 
+            - X (pd.DataFrame): Features for validation.
+            - Y (pd.Series): Target variable for validation.
     """
     test = prepare_val (data, valid)
     
@@ -164,8 +217,6 @@ def prepare_data_validation_boosting(data, valid, dbn):
         if len(splitted) == 1:
                 lag_cols.append(col)
                 continue
-        #if 'shop_item_cnt' not in col:
-        #    continue
         for db in range(1,dbn):
             
             if db == int(splitted[1]):
@@ -173,12 +224,21 @@ def prepare_data_validation_boosting(data, valid, dbn):
                 lag_cols.append(col)
 
     X = test[lag_cols]
-    Y = test[f'value_shop_id_item_id${dbn}']#value_shop_id_item_id
+    Y = test[f'value_shop_id_item_id${dbn}']
     
     return X, Y
 
 def select_columns_for_reading(path, dbn):
-   
+    """
+    Selects relevant columns to read from a CSV file based on the date block number. Feature selection step done here
+
+    Args:
+        path (str): Path to the CSV file.
+        dbn (int): Date block number used to filter columns.
+
+    Returns:
+        list: List of column names to read.
+    """
     columns = pd.read_csv(path, nrows=0).columns.tolist()
 
     cols = []
@@ -223,21 +283,31 @@ def select_columns_for_reading(path, dbn):
 
 def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_size_to_read):
     """
-    
+    Creates training batches for date_block_num.
+
+    Args:
+        batch_size (int): Number of samples per batch.
+        dbn (int): Date block number.
+        shop_item_pairs_WITH_PREV_in_dbn (np.array[np.array[np.array[int]]]):  Accumulated cartesian products for each time block.
+        batch_size_to_read (int): Chunk size for reading data from csv.
+
+    Yields:
+        tuple: 
+            - X (pd.DataFrame): Feature batch.
+            - Y (pd.Series): Target batch.
     """
     
-    train = np.random.permutation (shop_item_pairs_WITH_PREV_in_dbn[dbn])#-1?????????
+    train = np.random.permutation (shop_item_pairs_WITH_PREV_in_dbn[dbn])
 
-    #chunk_num =  len(train)// batch_size if len(train)%batch_size==0  else   len(train) // batch_size + 1#MAY BE NEED TO CORRECT
-    chunk_num =  len(train)// batch_size if len(train)>=batch_size else 1#MAY BE NEED TO CORRECT
-    columns = select_columns_for_reading(SOURCE_PATH, dbn-1)#-1?????
-    for idx in range(chunk_num):#split shop_item_pairs_WITH_PREV_in_dbn into chuncks
+    chunk_num =  len(train)// batch_size if len(train)>=batch_size else 1
+    columns = select_columns_for_reading(SOURCE_PATH, dbn-1)
+    for idx in range(chunk_num):#splits shop_item_pairs_WITH_PREV_in_dbn into chuncks
         t1 = time.time()
         l_x=[]
         l_y=[]
         merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read, skipinitialspace=True, usecols=columns)
         l_sum = 0
-        for chunck in merged:#split merged into chuncks
+        for chunck in merged:#splits 'data/merged.csv' into chuncks
             
             l =  prepare_data_train_boosting(chunck,train[idx*batch_size:(idx+1)*batch_size], dbn) 
             #print(len(l[0]))
@@ -257,9 +327,19 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
 
 def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read):
     """
-    
+    Creates validation batches for date_block_num.
+
+    Args:
+        batch_size (int): Number of samples per batch.
+        dbn (int): Date block number.
+        shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
+        batch_size_to_read (int): Chunk size for reading data.
+
+    Yields:
+        tuple: 
+            - X (pd.DataFrame): Feature batch.
+            - Y (pd.Series): Target batch.
     """
-    
     val = shop_item_pairs_in_dbn[dbn]
     
     shops = np.unique(list(zip(*val))[0])
@@ -280,9 +360,7 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
         cartesian = cartesian_product[idx*batch_size:(idx+1)*batch_size]
 
         for chunck in merged:
-            #print('chunck',len(chunck))
-            #print('cartesian_product',len(cartesian))
-            
+
             l =  prepare_data_validation_boosting(chunck,cartesian, dbn) 
             l_sum+=len(l[0])
             l_x.append( l[0] )
@@ -298,60 +376,37 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
         yield [l_x,l_y]#, test
 
 
-def select_columns(X_train, dbn):#WHEN LINEAR MODELS, X_train = append_some_columns(X_train,dbn) - to comment
-    X_train = append_some_columns(X_train,dbn)
-    cols=[]
-    for col in X_train.columns:
-        l = col.split(';')
-        if len(l) == 1:
-            cols.append(col)
-            continue
-        name = l[0]
-        num = int(l[1])
-        if 'ema' in name:
-           if num <= 3:
-                cols.append(col)
-                continue
-        if 'value_shop_id_item_id' in name:
-            if num <=6 or num == 12:
-                cols.append(col)
-                continue
-        if 'value_shop_id_lag' in name:
-            continue
-
-        if 'value_price' in name:
-            if num <= 1:
-                cols.append(col)
-                continue
-            
-        if 'value' in name:
-            if num <=3:
-                cols.append(col)
-                continue
-            
-        if 'diff' in name:
-            if num == 1:
-                cols.append(col)
-                continue
-            continue
-            
-        if 'change' in name:
-
-            if num <= 2:
-                cols.append(col)
-                continue
-
-            continue
-        
-    return X_train[cols]
-
 def append_some_columns(X_train, dbn):
+    """
+    Adds additional columns like date_block_num and month to the training data.
+
+    Args:
+        X_train (pd.DataFrame): Training data.
+        dbn (int): Current date block number.
+
+    Returns:
+        pd.DataFrame: Training data with additional columns.
+    """
     X_train['date_block_num'] = dbn
     X_train['month'] = dbn%12
     return X_train
 
 def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
-    
+    """
+    Trains a machine learning model with specified batches and tracks RMSE for training on current val_month.
+    Args:
+        model (object): Machine learning model to be trained.
+        batch_size (int): Number of samples per batch.
+        val_month (int): Month used for validation.
+        shop_item_pairs_WITH_PREV_in_dbn (np.array[np.array[np.array[int,int]]]):  Accumulated cartesian products for each time block.
+        batch_size_to_read (int): Chunk size for reading data from csv.
+        epochs (int): Number of epochs for training. 
+
+    Returns:
+        tuple: 
+            - model (object): Trained model.
+            - columns_order (list[str]): Ordered list of feature columns.
+    """
     first=True
     rmse = 0
     c=0
@@ -453,14 +508,29 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
     return model, columns_order
 
 def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_in_dbn, batch_size_to_read):
+    """
+    Validates the model and calculates RMSE on the validation set on the current val_month.
+
+    Args:
+        model (object): Machine learning model to be validated.
+        batch_size (int): Number of samples per batch.
+        val_month (int): Month used for validation.
+        columns_order (list[str]): Order of feature columns.
+        shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
+        batch_size_to_read (int): Chunk size for reading data.
+
+    Returns:
+        tuple: 
+            - val_preds (np.array[float]): Predictions for validation set.
+            - val_rmse (float): RMSE for validation set.
+    """
     rmse = 0
     c=0
     
     val_preds = []
     Y_true_l = []
     preds_l = []
-    #create_batch_train(merged,batch_size, val_month) - return train set, where Y_val
-    #is shop_item_cnt_month{val_month}
+    
     for X_val, Y_val in create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn, batch_size_to_read):#but then cartesian product used
         if X_val is None:
                     continue
@@ -527,8 +597,22 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
 
 def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
     """
-    Function for validating model
-    
+    Runs model training and validation across multiple months and computes RMSE for each month.
+    Note: epochs must be set to 1. Otherwise good results are not guaranteed
+    Note: batch learning works properly only for LGBMRegressor. Using another model with batch_size<=len(shop_item_pairs_WITH_PREV_in_dbn[dbn]) will lead to incorrect results
+    Args:
+        model (object): Machine learning model.
+        batch_size (int): Number of samples per batch.
+        val_monthes (list): List of months for validation.
+        shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
+        shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int,int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
+        batch_size_to_read (int): Chunk size for reading data from csv.
+        epochs (int): Number of epochs for training.
+
+    Returns:
+        tuple: 
+            - val_errors (list[np.array[float]]): List of RMSE values for each month.
+            - val_preds (list[float]): Predictions for validation set.
     """
     
     val_errors = []
@@ -550,12 +634,8 @@ def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_
         print('feature importances, ')
         print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
         
-        #dump_list = model.get_booster().get_dump()
-        #num_trees = len(dump_list)
-        
-        #print('n_estimators:', model.n_estimators_)
         t1 = time.time()
-        #print(f'validation on month {val_month} started')
+
         val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
         t2 = time.time()
         print(f'validation time on month {val_month},',t2-t1)
@@ -566,6 +646,20 @@ def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_
     return val_errors, val_preds
 
 def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,batch_size_to_read):
+    """
+    Generates predictions for the test dataset and prepares a submission file.
+    
+
+    Args:
+        model (object): Trained machine learning model.
+        batch_size (int): Number of samples per batch.
+        columns_order (list): Ordered list of feature columns.
+        shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
+        batch_size_to_read (int): Chunk size for reading data from csv.
+
+    Returns:
+        pd.DataFrame: Submission-ready DataFrame containing predictions.
+    """
     val_month = 34
     test = pd.read_csv('../data_cleaned/test.csv')
     
@@ -605,25 +699,39 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
             
         
         X_val = make_X_lag_format(X_val, val_month)
-        #X_val=select_columns(X_val, val_month)
+
         X_val = X_val[columns_order]
 
         
         y_val_pred=model.predict(X_val)
-        y_val_pred = np.clip(y_val_pred,0,20)#lgb - validate features
+        y_val_pred = np.clip(y_val_pred,0,20)
         Y_true_l.append(Y_val)
         
         
         app = pd.DataFrame({'item_id':item_id,'shop_id': shop_id, 'item_cnt_month':y_val_pred})
         PREDICTION = pd.concat([PREDICTION, app],ignore_index=True)
 
-    #val_rmse = root_mean_squared_error(PREDICTION['item_cnt_month'], np.concat(Y_true_l))
-    #print('val rmse, ',val_rmse)
+ 
     
     data_test = data_test.merge(PREDICTION,on=['shop_id','item_id'])[['ID','item_cnt_month']]
     return data_test
 
 def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
+    """
+    Pipeline for both training model and creating submission
+    Note: batch learning works properly only for LGBMRegressor. Using another model with batch_size<=len(shop_item_pairs_WITH_PREV_in_dbn[dbn]) will lead to incorrect results
+    Args:
+        merged (_type_): not used
+        model (object): Trained machine learning model.
+        batch_size (int): Number of samples per batch.
+        shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
+        shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int,int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
+        batch_size_to_read (int): Chunk size for reading data from csv.
+        epochs (_type_): _description_
+
+    Returns:
+        pd.DataFrame: Submission-ready DataFrame containing predictions.
+    """
     val_errors = []
     
     val_errors=[]
@@ -665,11 +773,11 @@ if __name__ == '__main__':
     #model =RandomForestRegressor(max_depth = 10, n_estimators = 100,n_jobs=8)
     #model = xgb.XGBRegressor(eta=0.001, max_leaves=640,nthread=8,device='gpu', enable_categorical=True,n_estimators=5000)
    
-    batch_size=70000000
-    batch_size_to_read=200000000
+    batch_size=70000000 #Should be set this to large number as there is no need for batching
+    batch_size_to_read=200000000 #Should be set this to large number as there is no need for batching
 
-    is_create_submission=False
-    epochs=1
+    is_create_submission=True
+    epochs=1 #Must be set to 1
 
     if is_create_submission:
         print('submission creation started...')

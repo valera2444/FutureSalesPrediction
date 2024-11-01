@@ -7,6 +7,17 @@ import time
 FIRST_N_MONTH_TO_DROP = 6
 
 def prepare_past_ID_s_CARTESIAN(data_train):
+    """
+    Prepares unique (shop, item) pairs in a Cartesian product format over time blocks.
+    
+    Args:
+        data_train (pd.DataFrame): Training data with 'shop_id', 'item_id', and 'date_block_num' columns.
+
+    Returns:
+        tuple: A tuple containing:
+            - shop_item_pairs_in_dbn (pd.DataFrame): Cartesian product of shop_id and item_id columns from data_train for each 'date_block_num'.
+            - shop_item_pairs_WITH_PREV_in_dbn (np.array[np.array[np.array[int]]]): Accumulated cartesian products for each time block up since 0 to the current block.
+    """
     data_train['shop_item'] = [tuple([shop, item]) for shop, item in zip(data_train['shop_id'], data_train['item_id'])]
     #34 block contains A LOT more shop_item than others
     shop_item_pairs_in_dbn = data_train.groupby('date_block_num')['shop_item'].apply(np.unique)
@@ -35,13 +46,22 @@ def prepare_past_ID_s_CARTESIAN(data_train):
         if block == 0:
             continue
         arr = np.append(shop_item_pairs_WITH_PREV_in_dbn[block - 1],
-                             cartesians[block], axis=0)#shop_item_pairs_WITH_PREV_in_dbn doesnt contain 34 month
+                             cartesians[block], axis=0)
         
         shop_item_pairs_WITH_PREV_in_dbn[block] = np.unique(arr, axis=0)
         #print(len(shop_item_pairs_WITH_PREV_in_dbn[block]))
     return shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn
 
 def create_change(table):
+    """
+    Calculates percentage change for each consecutive month column in the table.
+    
+    Args:
+        table (pd.DataFrame): Table with numerical month columns representing metrics over time.
+
+    Returns:
+        pd.DataFrame: Table with calculated percentage changes for each month column.
+    """
     table=table.copy().fillna(0)
 
     cols = [col for col in table.columns if col.isdigit()]
@@ -60,6 +80,18 @@ def create_change(table):
 import time
 
 def create_pivot_table(data,index, item_shop_city_category_sup_category,column='item_cnt_day'):
+    """
+    Creates a pivot table with metrics aggregated by specified index and month blocks.
+    
+    Args:
+        data (pd.DataFrame): Data with relevant metrics and date blocks.
+        index (list of str): List of columns to group data by in the pivot table.
+        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to return data with all requierd [shop, item] pairs.
+        column (str): Metric to aggregate; default is 'item_cnt_day'.
+
+    Returns:
+        pd.DataFrame: Merged pivot table with specified index columns.
+    """
     if column == 'item_cnt_day':
         agg = 'mean'
     else:
@@ -83,6 +115,17 @@ def create_pivot_table(data,index, item_shop_city_category_sup_category,column='
     return merged
 
 def calculate_ema_6(table, alpha=2/(6+1)):
+    """
+    Calculates the 6-month Exponential Moving Average (EMA) for each record and month.
+    
+    Args:
+        table (pd.DataFrame): Data with columns for each month containing metrics.
+        alpha (float): EMA smoothing factor, default set for a 6-month EMA.
+
+    Returns:
+        pd.DataFrame: Table with EMA values calculated for each month.
+    """
+
     EMAs = pd.DataFrame(columns = table.columns)
     EMAs['shop_id'] = table['shop_id']
     EMAs['item_id'] = table['item_id']
@@ -104,6 +147,19 @@ def calculate_ema_6(table, alpha=2/(6+1)):
 
 
 def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_category_sup_category=None,is_cnt=True):
+    """
+    Calculates EMA for specified groupings and returns metrics based on a given column type.
+    
+    Args:
+        source (pd.DataFrame): Original data source.
+        groupby (list of str): List of columns to group data by.
+        alpha (float): EMA smoothing factor.
+        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to return data with all requierd [shop, item] pairs.
+        is_cnt (bool): Whether to use item count data; set to False for price data.
+
+    Returns:
+        pd.DataFrame: Aggregated table with EMAs calculated for the specified groupings.
+    """
     column='item_cnt_day' if is_cnt else 'item_price'
     means = create_pivot_table(source,index=groupby,item_shop_city_category_sup_category=item_shop_city_category_sup_category,column=column)
     #means = find_mean_by(source, groupby, item_shop_city_category_sup_category,is_cnt)
@@ -123,6 +179,15 @@ def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_categ
     return train
     
 def calculate_diff(df):
+    """
+    Calculates time difference since first sale occurrence for each item in each month.
+    
+    Args:
+        df (pd.DataFrame): Data table with month columns for calculating time differences.
+
+    Returns:
+        pd.DataFrame: Data table with calculated time difference since first sale.
+    """
     df_1=df.copy()
 
     df['-1'] = 0.0
@@ -145,7 +210,13 @@ def calculate_diff(df):
     return df_1
 
 def rename_columns(df, name=None):
+    """
+    Renames columns in a DataFrame inplace by appending a specified name as a prefix.
     
+    Args:
+        df (pd.DataFrame): Data to rename columns for.  
+        name (str): Prefix to add to each column name.
+    """
     new_columns = {}
     for col in df.columns:
         new_col = str(col)
@@ -168,8 +239,25 @@ def rename_columns(df, name=None):
 
 
 def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_sup_category=None):
-
+    """
+    Merges data from multiple sources into a single CSV file, handling large datasets in chunks.
+    
+    Args:
+        item_shops (pd.DataFrame): Data with unique item-shop pairs.
+        pathes (list of str): List of file paths to read and merge data from.
+        chunksize (int): Size of chunks for data processing.
+        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to return data with all requierd [shop, item] pairs.
+    """
     def create_batch_for_writing(file_length, chunksize):
+        """
+
+        Args:
+            file_length (int): _description_
+            chunksize (int): _description_
+
+        Returns:
+            list[list[int,int]]: indexes for batches in files from pathes
+        """
         l = file_length
         
         chunk_num = l // chunksize if l%chunksize==0  else   l // chunksize+ 1
@@ -179,7 +267,7 @@ def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_su
 
         return i_l
 
-    critical=['change','mean','ema']
+    critical=['change','mean','ema']#cant calculate statistics for them for first 6 monthes (for change can, but we won't use it)
 
     #data = pd.read_csv('data/'+path+'.csv', chunksize=chunksize)
     idxs = create_batch_for_writing(len(item_shops), chunksize)
@@ -220,7 +308,23 @@ def merge_boosting(item_shops, pathes, chunksize=None,item_shop_city_category_su
 
 
 def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1)):
+    """
+    Creates and saves files containing various featues.
+
+    Created csv's will have columns [shop_id, item_id, *[str(i) for i in range(35)]]
+
+    Note: item_cnt_day name is worng, it's actually item_cnt_month. Also item_price is a mean price of (shop_id, item_id) pairs in date_block_num
+    Args:
+        data_train (pd.DataFrame): Training data. Columns are shop_id, item_id, city, item_category_id, super_categoty, item_cnt_day, item_price
+        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to return data with all requierd [shop, item] pairs.
+        alpha (float): EMA smoothing factor.
+
+    Returns:
+        list[str]: List of generated file names for the processed data. Used to merge them in a single csv
+    """
     print('prepare_files started...')
+
+    #list of columns to find EMA by. File name will have format ema_{'_'.join(gr)}.csv'. calculates EMA for last 6 monthes
     group_bys_EMA = [['shop_id','item_category_id'],
                  ['item_id','city'],
                  ['item_id'],
@@ -241,6 +345,7 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
         print(f'EMA calculated for {'_'.join(gr)}.csv; time:', t2-t1)
         names.append(f'ema_{'_'.join(gr)}')
         
+    #list of lists of columns to find sales by. File name will have format value_{'_'.join(gr)}.csv'. This calculates sales for 1 date_block_nnum
     group_bys_lags = [['shop_id','item_id'],
                  ['item_id'],
                  ['item_category_id']
@@ -303,6 +408,15 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
 
 def calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunksize_when_writing):
 
+    """
+    Calculates and writes EMA metrics and other statistics in chunks to handle large data sizes.
+    
+    Args:
+        data_train (pd.DataFrame): Training data. Columns are shop_id, item_id, city, item_category_id, super_categoty, item_cnt_day, item_price
+        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to return data with all requierd [shop, item] pairs.
+        chunksize_when_writing (int): Chunk size for reading data from created csv's and writing data into common csv
+    """
+
     alpha=0.0
     print('prepare_files started..')
     pathes = prepare_files(data_train,item_shop_city_category_sup_category, alpha=alpha)
@@ -319,6 +433,16 @@ def calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunks
     print('merge ended, time:', t2-t1)
     
 def create_split(past, chunk_size=300000):
+    """
+    Creates randomized splits of indices for batching data preparation.
+
+    Args:
+        past (array-like): Dataset to split.
+        chunk_size (int): Number of samples per batch.
+
+    Returns:
+        list of arrays: List of index arrays for each batch.
+    """
     l = len(past)
     idxs = np.random.permutation(l)
     chunk_num = l // chunk_size if l%chunk_size==0  else   l // chunk_size+ 1
@@ -329,7 +453,17 @@ def create_split(past, chunk_size=300000):
     return i_l
 
 def prepare_batches(past,item_shop_city_category_sup_category, chunk_size):
+    """
+    Prepares batches of Cartesian product data with merged metadata for processing.
 
+    Args:
+        past (array-like): Data representing all unique shop-item pairs.
+        item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs and relevant colymns
+        chunk_size (int): Size of each batch.
+
+    Yields:
+        pd.DataFrame: Batch of merged data.
+    """
     l = len(past)
     idxs = create_split(past, chunk_size=chunk_size)
     for chunk in idxs:
@@ -347,6 +481,16 @@ def prepare_batches(past,item_shop_city_category_sup_category, chunk_size):
 
    
 def parse_city(shop_name):
+    """
+    Extracts city name from shop name string.
+    
+    Args:
+        shop_name (str): Name of the shop.
+
+    Returns:
+        str: Extracted city name.
+    """
+
     if shop_name.split()[0] == '!Якутск':
         return  'Якутск'
 
@@ -356,6 +500,16 @@ def parse_city(shop_name):
         return shop_name.split()[0]
 
 def create_item_shop_city_category_super_category(shop_city_pairs, merged):
+    """
+    Merges shop and item data with additional city, category, and super-category information.
+    
+    Args:
+        shop_city_pairs (array-like): Array of unique shop-item pairs.
+        merged (pd.DataFrame): Data containing shop and item metadata.
+
+    Returns:
+        pd.DataFrame: Merged table with city, item category, and super-category columns.
+    """
     shop_city_pairs=pd.DataFrame({'shop_id':shop_city_pairs[:,0],'item_id':shop_city_pairs[:,1]})
     merged['city'] = merged['shop_name'].apply(parse_city).astype('category').cat.codes.astype(np.uint8)
     
@@ -403,7 +557,6 @@ if __name__ == '__main__':
     print('creating item_shop_city_category_sup_category time:',t2-t1)
 
     data_train = merged.sort_values(by='date_block_num')
-    #merged = create_item_shop_data(data_train)
     
     del test
     
