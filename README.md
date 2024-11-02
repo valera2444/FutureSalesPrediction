@@ -26,11 +26,24 @@ The script `validation_boosting.py` handles data preprocessing for training and 
 
 3. **`make_X_lag_format`**
    - Transforms feature names to lagged format for modeling. For instance, if the model is validated on month 25 and needs the feature `ema_item_id$23`, the feature name is converted to `ema_item_id_lag_1` for training and `ema_item_id_lag_2` for validation. This allows consistent alignment of past features as "lag" variables for any target month.
+4. **`sample_indexes`**
+   - Creates indexes for batches. Return list (each element - one date_block_num), where each element is list (each element - tuple(start and end indexes for batch)) 
+
+5. **`create_batch_train`**
+   - Returns (X,y). Batch size is not stable. Some rows from merged.csv may be ignored during training since each batch must contain same number of samples.
+
+6. **`train_model`** (parametrs are (model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs))
+   - Function for  training model by batches. batch_size parameter is used to calculate total number of batches, which is then used to calculate batch size for each element from shop_item_pairs_WITH_PREV_in_dbn. When calculating this, floor division is used since each batch must contain same number of samples.
+
+> **Note**: `batch_size,  epochs and n_estimators` parameters affect number of estimators built by LGBMRegressor. Total number of estimators for month k will be: `epochs*n_estimators*(total_number_of_samples_for_traing // batch_size)`, where total_nunber_of_samples_for_traing can be calculated as `sum(lengthes[k-last_monthes_to_take_in_train+1:k+1])`
 
 ### Train and Validation Set Creation
 To validate the model on a specific month `k`:
 - Use `(shop, item)` pairs from `shop_item_pairs_in_dbn[k]` to create validation set.
 - Use `(shop, item)` pairs from `shop_item_pairs_WITH_PREV_in_dbn[k]` to create training set, providing the model with prior months’ data up to `k-1`.
+
+> **Note**: Such data format (shop,item pairs as "index" and all others features as columns in merged.csv) have been chosen because previously it was common data preparation pipeline for boosting and LSTM, but LSTM is no longer used
+
 
 ## Usage and Execution
 1. **Run Data Preparation**: Execute `prepara_data.py` to prepare the initial merged dataset.
