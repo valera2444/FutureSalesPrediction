@@ -265,7 +265,7 @@ def select_columns_for_reading(path, dbn):
             continue
 
 
-        if 'ema' in name and dbn_diff <= 3:
+        if 'ema' in name and dbn_diff <= 2:
             cols.append(col)
             continue
         elif 'value_shop_id_item_id' in name and (dbn_diff <= 3 or dbn_diff == 6 or dbn_diff == 12):
@@ -848,7 +848,7 @@ if __name__ == '__main__':
 
     model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=48, n_estimators = n_estimators,  learning_rate=0.0065)
 
-    is_create_submission=True
+    is_create_submission=False
 
     if not is_create_submission:
         print('validation started...')

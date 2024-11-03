@@ -69,7 +69,7 @@ def create_change(table):
     result = table.copy()
     for col in cols[1:]:
     
-        result[col] = (table[col] / table[str(int(col)-1)] - 1) * 100
+        result[col] = table[col] - table[str(int(col)-1)]  
         
     result = result.replace([np.inf], 0)
     result = result.replace([np.nan], 0)
@@ -381,6 +381,20 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
         print(f'EMA calculated for {'_'.join(gr)}.csv; time:', t2-t1)
         names.append(f'value_price_{'_'.join(gr)}')
     
+    t1 = time.time()
+    mean_cnt_items = calculate_EMAs_pipeline(data_train, #Worng or not already
+                                                ['item_id'], 
+                                                item_shop_city_category_sup_category=item_shop_city_category_sup_category,
+                                                alpha=1.0,
+                                                is_cnt=True)
+    
+    changes = create_change(mean_cnt_items)
+    changes.to_csv('data/item_cnt_change.csv', index=False)
+    t2 = time.time()
+    print(f'cnt change calculated; time:', t2-t1)
+    names += ['item_cnt_change']
+
+
     t1 = time.time()
     #prices = create_pivot_table(data_train,index=['item_id','shop_id'], item_shop_city_category_sup_category=item_shop_city_category_sup_category,column='item_price')
     mean_prices_items = calculate_EMAs_pipeline(data_train, #Worng or not already
