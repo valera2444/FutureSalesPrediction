@@ -1,9 +1,13 @@
+"""
+This file contains script for creating arrays for error analysis. 
+"""
+
 import pandas as pd
 import numpy as np
 import sklearn
 from sklearn.metrics import root_mean_squared_error
 from collections import defaultdict
-
+import mlflow
 
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestRegressor
@@ -448,7 +452,7 @@ def append_some_columns(X_train, dbn):
     X_train['month'] = dbn%12
     return X_train
 
-def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs,shop_item_pairs_in_dbn):
+def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs,shop_item_pairs_in_dbn, batches_for_training,experiment_id):
     """
     Trains a machine learning model with specified batches and tracks RMSE for training on current val_month.
     Args:
@@ -475,95 +479,103 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
     for epoch in range(epochs):
         print('epoch,',epoch)
         for X_train,Y_train  in create_batch_train(batch_size, val_month,shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
-            #print(f'train on batch {c} started')
-            t1_batch = time.time()
-            t1_data_prep = time.time()
-            #print(f'data preparation on batch {c} started')
-            if X_train is None:
-                print('None')
-                continue
 
-            if type(model) in [Lasso,SVC]:
-                #print(X_train.columns)
-                X_train.drop('shop_id', inplace=True, axis=1) 
-                X_train.drop('item_category_id', inplace=True, axis=1) 
-                X_train.drop('item_id', inplace=True, axis=1)
-                X_train.drop('city', inplace=True, axis=1)
-                X_train.drop('shop_id', inplace=True, axis=1)
-            elif type(model) ==LGBMRegressor:
-                #print(list(X_train.columns))
-            
-                X_train = X_train.drop('item_id', axis=1)
-                X_train['shop_id'] = X_train['shop_id'].astype('category')
-                X_train['item_category_id'] = X_train['item_category_id'].astype('category')
-                X_train['city'] = X_train['city'].astype('category')
-                X_train['super_category'] = X_train['super_category'].astype('category')
-                
-                pass
-            
-            
-                
-            Y_train = np.clip(Y_train,0,20)
-            
-            if X_train.empty:
-                print('None')
-                continue
-            
-            #X_train = make_X_lag_format(X_train, val_month-1)#-1 because this dbn is for validation, dbn for train is 1 less
-            
-            #X_train=select_columns(X_train, val_month-1)
-            
-            
-            columns_order=X_train.columns
+            run_name=f'batch {epoch}'
 
-            t2_data_prep = time.time()
-            #print(f'data preparation on batch {c} time:',t2_data_prep-t1_data_prep)
-            #print('model fitting started')
-            t1_fit = time.time()
-            if c == 0:
-                pass
-                #print('train columns')
-                #print(X_train.columns)
-            if type(model) in [Lasso,SVC]:
-                model.fit(X_train, Y_train)
-                y_train_pred = model.predict(X_train)
-            
-            elif type(model) == LGBMRegressor:
-                if first:
+            with mlflow.start_run(experiment_id=experiment_id, run_name=run_name, nested=True):
+
+                #print(f'train on batch {c} started')
+                t1_batch = time.time()
+                t1_data_prep = time.time()
+                #print(f'data preparation on batch {c} started')
+                if X_train is None:
+                    print('None')
+                    continue
+
+                if type(model) in [Lasso,SVC]:
+                    #print(X_train.columns)
+                    X_train.drop('shop_id', inplace=True, axis=1) 
+                    X_train.drop('item_category_id', inplace=True, axis=1) 
+                    X_train.drop('item_id', inplace=True, axis=1)
+                    X_train.drop('city', inplace=True, axis=1)
+                    X_train.drop('shop_id', inplace=True, axis=1)
+                elif type(model) ==LGBMRegressor:
+                    #print(list(X_train.columns))
+                
+                    X_train = X_train.drop('item_id', axis=1)
+                    X_train['shop_id'] = X_train['shop_id'].astype('category')
+                    X_train['item_category_id'] = X_train['item_category_id'].astype('category')
+                    X_train['city'] = X_train['city'].astype('category')
+                    X_train['super_category'] = X_train['super_category'].astype('category')
+                    
+                    pass
+                
+                
+                    
+                Y_train = np.clip(Y_train,0,20)
+                
+                if X_train.empty:
+                    print('None')
+                    continue
+                
+                #X_train = make_X_lag_format(X_train, val_month-1)#-1 because this dbn is for validation, dbn for train is 1 less
+                
+                #X_train=select_columns(X_train, val_month-1)
+                
+                
+                columns_order=X_train.columns
+
+                t2_data_prep = time.time()
+                #print(f'data preparation on batch {c} time:',t2_data_prep-t1_data_prep)
+                #print('model fitting started')
+                t1_fit = time.time()
+                if c == 0:
+                    pass
+                    #print('train columns')
+                    #print(X_train.columns)
+                if type(model) in [Lasso,SVC]:
                     model.fit(X_train, Y_train)
-                    first=False
-                else:
-                    model.fit(X_train, Y_train, init_model=model)
-                y_train_pred = model.predict(X_train, validate_features=True)
+                    y_train_pred = model.predict(X_train)
+                
+                elif type(model) == LGBMRegressor:
+                    if first:
+                        model.fit(X_train, Y_train)
+                        first=False
+                    else:
+                        model.fit(X_train, Y_train, init_model=model)
+                    y_train_pred = model.predict(X_train, validate_features=True)
 
-            elif type(model) == xgb.XGBRegressor:
-                if first:
-                    model=model.fit(X_train, Y_train)
-                    first=False
-                else:
-                    print(model.get_booster())
-                    #Works not as expected
-                    model=model.fit(X_train, Y_train, xgb_model=model.get_booster())
-                    
-                    
-                y_train_pred = model.predict(X_train)  
+                elif type(model) == xgb.XGBRegressor:
+                    if first:
+                        model=model.fit(X_train, Y_train)
+                        first=False
+                    else:
+                        print(model.get_booster())
+                        #Works not as expected
+                        model=model.fit(X_train, Y_train, xgb_model=model.get_booster())
+                        
+                        
+                    y_train_pred = model.predict(X_train)  
 
-            elif type(model) == RandomForestRegressor:
-                model.fit(X_train, Y_train)
-                y_train_pred = model.predict(X_train)  
-            t2_fit = time.time()
-            #print(f'model fitting time on batch {c},',t2_fit - t1_fit)
-            
-            Y_true_l.append(Y_train)
-            preds_l.append(y_train_pred)
-            t2_batch = time.time()
-            print(f'train on batch {c} time,',t2_batch-t1_batch)
-            
-            if shop_item_pairs_in_dbn is not None:
-                val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
-                print(f'val score after batch {c}', val_error)
+                elif type(model) == RandomForestRegressor:
+                    model.fit(X_train, Y_train)
+                    y_train_pred = model.predict(X_train)  
+                t2_fit = time.time()
+                #print(f'model fitting time on batch {c},',t2_fit - t1_fit)
+                
+                Y_true_l.append(Y_train)
+                preds_l.append(y_train_pred)
+                t2_batch = time.time()
+                print(f'train on batch {c} time,',t2_batch-t1_batch)
+                
+                if shop_item_pairs_in_dbn is not None:
+                    val_pred, val_error, _ = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
+                    print(f'val score after batch {c}', val_error)
+                    mlflow.log_metric('rmse',val_error)
 
-            c+=1
+                c+=1
+                if c == batches_for_training:
+                    break
         
     train_rmse = root_mean_squared_error(pd.concat(Y_true_l), np.concat(preds_l))
     print('train_rmse, ',train_rmse)
@@ -594,10 +606,12 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
     val_preds = []
     Y_true_l = []
     preds_l = []
-    
+    Y_true_l_shop_item=[]
     for X_val, Y_val in create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn, batch_size_to_read):#but then cartesian product used
+        shop_id = X_val.shop_id
+        item_id = X_val.item_id
         if X_val is None:
-                    continue
+            continue
         
         if type(model) in [sklearn.linear_model._coordinate_descent.Lasso,
                           SVC]:
@@ -647,19 +661,21 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
         
         
         preds_l.append(y_val_pred)
+        Y_true_l_shop_item.append([np.array(Y_val).flatten(), np.array(shop_id).flatten(), np.array(item_id).flatten()])
         Y_true_l.append(Y_val)
         
         c+=1
         
         val_preds.append(y_val_pred)
 
+
     
     val_rmse = root_mean_squared_error(pd.concat(Y_true_l), np.concat(preds_l))
     print('val rmse, ',val_rmse)
 
-    return val_preds, val_rmse
+    return val_preds, val_rmse,Y_true_l_shop_item
 
-def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
+def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs,experiment_id,batches_for_training):
     """
     Runs model training and validation across multiple months and computes RMSE for each month.
     Note: epochs must be set to 1. Otherwise good results are not guaranteed
@@ -683,31 +699,39 @@ def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_
     
     val_preds=[]
     
-    
+    val_true = []
     for val_month in val_monthes:
+        run_name=f'validation on {val_month}'
+        with mlflow.start_run(experiment_id=experiment_id, run_name=run_name, nested=True):
+            print(f'month {val_month} started')
+            t1 = time.time()
+            
+            print('month', val_month%12)
 
-        print(f'month {val_month} started')
-        t1 = time.time()
+            model,columns_order = train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs,shop_item_pairs_in_dbn,batches_for_training,experiment_id)
+
+            t2=time.time()
+            print(f'model training on {val_month} time,',t2-t1)
+            print('feature importances, ')
+            print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
+            
+            t1 = time.time()
+
+            val_pred, val_error, y_shop_item_val = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
+            t2 = time.time()
+            print(f'validation time on month {val_month},',t2-t1)
+            val_errors.append(val_error)
+            val_preds.append(val_pred)
+            val_true.append(y_shop_item_val)
+
+            mlflow.log_params(model.get_params())
+            mlflow.log_metric('rmse',np.mean(val_errors))
+            mlflow.log_param('batch_size',batch_size)
+            mlflow.log_param('batches_for_training',batches_for_training)
+
         
-        print('month', val_month%12)
 
-        model,columns_order = train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs,shop_item_pairs_in_dbn)
-
-        t2=time.time()
-        print(f'model training on {val_month} time,',t2-t1)
-        print('feature importances, ')
-        print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
-        
-        t1 = time.time()
-
-        val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
-        t2 = time.time()
-        print(f'validation time on month {val_month},',t2-t1)
-        val_errors.append(val_error)
-        val_preds.append(val_pred)
-        
-
-    return val_errors, val_preds
+    return val_errors, val_preds, val_true
 
 def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,batch_size_to_read):
     """
@@ -818,7 +842,26 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
 
     return data_test
     
+def get_or_create_experiment(experiment_name):
+    """
+    Retrieve the ID of an existing MLflow experiment or create a new one if it doesn't exist.
 
+    This function checks if an experiment with the given name exists within MLflow.
+    If it does, the function returns its ID. If not, it creates a new experiment
+    with the provided name and returns its ID.
+
+    Parameters:
+    - experiment_name (str): Name of the MLflow experiment.
+
+    Returns:
+    - str: ID of the existing or newly created MLflow experiment.
+    """
+
+    if experiment := mlflow.get_experiment_by_name(experiment_name):
+        return experiment.experiment_id
+    else:
+        return mlflow.create_experiment(experiment_name)
+    
 if __name__ == '__main__':
 
     data_train = pd.read_csv('../data_cleaned/data_train.csv')
@@ -835,8 +878,7 @@ if __name__ == '__main__':
 
 
     batch_size_to_read=200000000 #Should be set this to large number as there is no need for batching
-
-
+    batches_for_training=5
     n_estimators = 500
     batch_size=3000000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
     epochs=1#Optionally set this to > 1 only for submission. This doesn't improve metric much but takes long time
@@ -848,30 +890,33 @@ if __name__ == '__main__':
 
     model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=48, n_estimators = n_estimators,  learning_rate=0.0065)
 
-    is_create_submission=False
+    experiment_id=get_or_create_experiment('LGBM expanding window validation')
 
-    if not is_create_submission:
-        print('validation started...')
-        val_errors, val_preds = validate_ML(
-                                            model=model,
-                                            batch_size=batch_size,
-                                            val_monthes=val_monthes, 
-                                            shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
-                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
-                                            batch_size_to_read=batch_size_to_read,
-                                            epochs=epochs
-        )
-        print(val_errors)
+    run_name='Run_1'
 
-    else:
-        print('submission creation started...')
-        submission = create_submission_pipeline(merged=None, 
-                                            model=model,
-                                            batch_size=batch_size,
-                                            shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
-                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
-                                            batch_size_to_read=batch_size_to_read,
-                                            epochs=epochs
-                                            )
-        submission.to_csv('submission.csv', index=False)
-        print(submission.describe())
+    mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
+
+    with mlflow.start_run(experiment_id=experiment_id, run_name=run_name, nested=True):
+
+        is_create_submission=False
+
+        if not is_create_submission:
+            print('validation started...')
+            val_errors, val_preds, val_true = validate_ML(
+                                                        model=model,
+                                                        batch_size=batch_size,
+                                                        val_monthes=val_monthes, 
+                                                        shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
+                                                        shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
+                                                        batch_size_to_read=batch_size_to_read,
+                                                        epochs=epochs,
+                                                        experiment_id=experiment_id,
+                                                        batches_for_training=batches_for_training
+            )
+            print(val_errors)
+
+            np.save('../error_analysis_and_interpret/val_errors.npy', np.array(val_errors,dtype=object))
+            np.save('../error_analysis_and_interpret/val_preds.npy', np.array(val_preds,dtype=object))
+            np.save('../error_analysis_and_interpret/val_true.npy', np.array(val_true,dtype=object))
+
+        
