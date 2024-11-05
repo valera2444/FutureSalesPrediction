@@ -451,7 +451,7 @@ def append_some_columns(X_train, dbn):
     X_train['date_block_num'] = dbn
     X_train['month'] = dbn%12
     return X_train
-
+from mlflow.entities import ViewType
 def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs,shop_item_pairs_in_dbn, batches_for_training,experiment_id):
     """
     Trains a machine learning model with specified batches and tracks RMSE for training on current val_month.
@@ -480,8 +480,8 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
         print('epoch,',epoch)
         for X_train,Y_train  in create_batch_train(batch_size, val_month,shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
 
-            run_name=f'batch {epoch}'
-
+            run_name=f'batch {c}'
+    
             with mlflow.start_run(experiment_id=experiment_id, run_name=run_name, nested=True):
 
                 #print(f'train on batch {c} started')
@@ -725,9 +725,10 @@ def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_
             val_true.append(y_shop_item_val)
 
             mlflow.log_params(model.get_params())
-            mlflow.log_metric('rmse',np.mean(val_errors))
+            mlflow.log_metric('rmse',np.mean(val_error))
             mlflow.log_param('batch_size',batch_size)
             mlflow.log_param('batches_for_training',batches_for_training)
+            mlflow.log_param('item_id_included',True)
 
         
 
@@ -878,7 +879,7 @@ if __name__ == '__main__':
 
 
     batch_size_to_read=200000000 #Should be set this to large number as there is no need for batching
-    batches_for_training=5
+    batches_for_training=2
     n_estimators = 500
     batch_size=3000000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
     epochs=1#Optionally set this to > 1 only for submission. This doesn't improve metric much but takes long time
@@ -892,12 +893,12 @@ if __name__ == '__main__':
 
     experiment_id=get_or_create_experiment('LGBM expanding window validation')
 
-    run_name='Run_1'
+    run_name='Run_with_item_id'
 
     mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
 
-    with mlflow.start_run(experiment_id=experiment_id, run_name=run_name, nested=True):
-
+    with mlflow.start_run(experiment_id=experiment_id,run_name=run_name, nested=True):
+        mlflow.set_tag("Features","item id included")
         is_create_submission=False
 
         if not is_create_submission:
