@@ -14,6 +14,10 @@ from sklearn.linear_model import Lasso
 from sklearn.linear_model import Ridge
 from sklearn.linear_model import LinearRegression
 
+import multiprocessing
+
+import mlflow
+
 import time
 
 #np.random.seed(42)
@@ -313,6 +317,51 @@ def sample_indexes(shop_item_pairs_WITH_PREV_in_dbn, number_of_batches):
         to_ret.append(idxs_in_dbn)
 
     return to_ret
+def prepare_batch_per_dbn(dbn, dbn_inner,last_monthes_to_take_in_train, shop_item_pairs_WITH_PREV_in_dbn,idxs,batch_size_to_read):
+    """
+    Function to execute on a single process (creates part of batch for one date block num)
+    Args:
+        dbn (int): current date block num
+        dbn_inner (int): index of dbn in inner loop in range(last_monthes_to_take_in_train)
+        last_monthes_to_take_in_train (_type_): _description_
+        shop_item_pairs_WITH_PREV_in_dbn (_type_): _description_
+        idxs (): indexes for shop_item_pairs_WITH_PREV_in_dbn for current date block num and batch
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
+
+    Returns:
+        list: list of X,Y for current date_block_num
+    """
+    curr_dbn = ((dbn_inner+1) - last_monthes_to_take_in_train) + dbn # in [dbn-last_monthes_to_take_in_train+1,dbn]
+    #idxs[dbn_inner] contains batch indexes for dbn_inner block(this array contains elements for [dbn-last_monthes_to_take_in_train+1,dbn] date_block_nums
+    
+    train = shop_item_pairs_WITH_PREV_in_dbn[idxs[0] : idxs[1] ]
+
+    
+    columns = select_columns_for_reading(SOURCE_PATH,curr_dbn-1)
+    #(dbn-1) because this dbn is for validation, dbn for train is 1 less
+
+    merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read, skipinitialspace=True, usecols=columns)
+    l_sum = 0
+    l_x=[]
+    l_y=[]
+    for chunck in merged:#split merged into chuncks
+        
+        l =  prepare_data_train_boosting(chunck,train, curr_dbn) 
+
+
+        l_0 = make_X_lag_format(l[0], curr_dbn-1)#-1 because this dbn is for validation, dbn for train is 1 less
+
+        l_0=append_some_columns(l_0, curr_dbn-1)
+        
+        l_sum += len(l[0])
+        l_x.append( l_0 )
+        l_y. append(l[1])
+    
+
+    l_x = pd.concat(l_x, copy=False)
+    l_y = pd.concat(l_y, copy=False)
+    return [l_x, l_y]
+
 
 def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_size_to_read):
     """
@@ -322,7 +371,7 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
         batch_size (int): Number of samples per batch.
         dbn (int): Date block number.
         shop_item_pairs_WITH_PREV_in_dbn (np.array[np.array[np.array[int]]]):  Accumulated cartesian products for each time block.
-        batch_size_to_read (int): Chunk size for reading data from csv.
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
 
     Yields:
         tuple: 
@@ -339,48 +388,43 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
     idxs = sample_indexes(shop_item_pairs_WITH_PREV_in_dbn[dbn-last_monthes_to_take_in_train+1:dbn+1],number_of_batches)
     print('total batches,',number_of_batches)
     for batch_number in range(number_of_batches):
-        dbns = []
-        batch = []
+        
         l_x=[]
         l_y=[]
         t1 = time.time()
         #This loop enables to includa data from different monthes in one batch
-        for dbn_inner in range(last_monthes_to_take_in_train):
-            curr_dbn = ((dbn_inner+1) - last_monthes_to_take_in_train) + dbn # in [dbn-last_monthes_to_take_in_train+1,dbn]
-            #idxs[dbn_inner] contains batch indexes for dbn_inner block(this array contains elements for [dbn-last_monthes_to_take_in_train+1,dbn] date_block_nums
-            
-            train = shop_item_pairs_WITH_PREV_in_dbn[curr_dbn][idxs[dbn_inner][batch_number][0] : idxs[dbn_inner][batch_number][1] ]
+        with multiprocessing.Pool( processes=multiprocessing.cpu_count() ) as pool:
+            result  = pool.starmap(prepare_batch_per_dbn, \
+                                    [[dbn, 
+                                      dbn_inner,
+                                      last_monthes_to_take_in_train, 
+                                      shop_item_pairs_WITH_PREV_in_dbn[((dbn_inner+1) - last_monthes_to_take_in_train) + dbn ],
+                                      idxs[dbn_inner][batch_number],
+                                      batch_size_to_read] for dbn_inner in range(last_monthes_to_take_in_train)])
 
-            
-            columns = select_columns_for_reading(SOURCE_PATH,curr_dbn-1)
-            #(dbn-1) because this dbn is for validation, dbn for train is 1 less
-            merged = pd.read_csv('data/merged.csv', skipinitialspace=True, usecols=columns)
-            
-            
-
-            l_sum = 0
-            
-            l =  prepare_data_train_boosting(merged,train,curr_dbn) 
-            l_sum += len(l[0])
-            l_0 = make_X_lag_format(l[0], curr_dbn-1)#-1 because this dbn is for validation, dbn for train is 1 less
-
-            l_0=append_some_columns(l_0, curr_dbn-1)
-
-            l_x.append( l_0 )
-            l_y. append(l[1])
-            
-            if len(l_x) == 0:
-                yield [None, None]
-
-            #print(f'create_batch_train, dbn {curr_dbn}:',l_sum)
+        #print(result)
+        l_x = [result[i][0] for i in range(len(result))]
+        l_y = [result[i][1] for i in range(len(result))]
+        #print(l_x)
         t2 = time.time()
         print('batch creation time [create_batch_train, 212],',t2-t1)
                 
-        l_x = pd.concat(l_x)
-        l_y = pd.concat(l_y)
+        
+        l_x = pd.concat(l_x, copy=False)
+        l_y = pd.concat(l_y, copy=False)
+
+        l_x.reset_index(drop=True, inplace=True)
+        l_y.reset_index(drop=True, inplace=True)
+
+        index_perm = np.random.permutation(l_x.index)[:batch_size]
+
+        l_x=l_x.iloc[index_perm]
+        l_y = l_y.iloc[index_perm]
+
         print('batch size', len(l_x))
         print(f'batch {batch_number} memory usage',np.sum(l_x.memory_usage()) / 10**6)
         yield [l_x, l_y]#, test
+
 
 def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read):
     """
@@ -390,7 +434,7 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
         batch_size (int): Number of samples per batch.
         dbn (int): Date block number.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
-        batch_size_to_read (int): Chunk size for reading data.
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
 
     Yields:
         tuple: 
@@ -426,8 +470,8 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
         if len(l_x) == 0:
             yield [None, None]
         print('create_batch_val,243:',l_sum)
-        l_x = pd.concat(l_x)
-        l_y = pd.concat(l_y)
+        l_x = pd.concat(l_x, copy=False)
+        l_y = pd.concat(l_y, copy=False)
 
 
         yield [l_x,l_y]#, test
@@ -448,7 +492,7 @@ def append_some_columns(X_train, dbn):
     X_train['month'] = dbn%12
     return X_train
 
-def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs,shop_item_pairs_in_dbn):
+def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,batches_for_training,shop_item_pairs_in_dbn):
     """
     Trains a machine learning model with specified batches and tracks RMSE for training on current val_month.
     Args:
@@ -456,8 +500,8 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
         batch_size (int): Number of samples per batch.
         val_month (int): Month used for validation.
         shop_item_pairs_WITH_PREV_in_dbn (np.array[np.array[np.array[int,int]]]):  Accumulated cartesian products for each time block.
-        batch_size_to_read (int): Chunk size for reading data from csv.
-        epochs (int): Number of epochs for training. 
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
+        batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
         shop_item_pairs_in_dbn (pd.DataFrame, optional): dataframe of cartesian products of (shop, item) for date_block_nums. If None, validation is not performed after every batch
 
     Returns:
@@ -472,98 +516,95 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
     
     Y_true_l = []
     preds_l = []
-    for epoch in range(epochs):
-        print('epoch,',epoch)
-        for X_train,Y_train  in create_batch_train(batch_size, val_month,shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
-            #print(f'train on batch {c} started')
-            t1_batch = time.time()
-            t1_data_prep = time.time()
-            #print(f'data preparation on batch {c} started')
-            if X_train is None:
-                print('None')
-                continue
+    for X_train,Y_train  in create_batch_train(batch_size, val_month,shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read):
+        #print(f'train on batch {c} started')
+        t1_batch = time.time()
+        t1_data_prep = time.time()
+        #print(f'data preparation on batch {c} started')
+        if X_train is None:
+            print('None')
+            continue
 
-            if type(model) in [Lasso,SVC]:
-                #print(X_train.columns)
-                X_train.drop('shop_id', inplace=True, axis=1) 
-                X_train.drop('item_category_id', inplace=True, axis=1) 
-                X_train.drop('item_id', inplace=True, axis=1)
-                X_train.drop('city', inplace=True, axis=1)
-                X_train.drop('shop_id', inplace=True, axis=1)
-            elif type(model) ==LGBMRegressor:
-                #print(list(X_train.columns))
+        if type(model) in [Lasso,SVC]:
+            #print(X_train.columns)
+            X_train.drop('shop_id', inplace=True, axis=1) 
+            X_train.drop('item_category_id', inplace=True, axis=1) 
+            X_train.drop('item_id', inplace=True, axis=1)
+            X_train.drop('city', inplace=True, axis=1)
+            X_train.drop('shop_id', inplace=True, axis=1)
+        elif type(model) ==LGBMRegressor:
+            #print(list(X_train.columns))
+        
+            X_train = X_train.drop('item_id', axis=1)
+            X_train['shop_id'] = X_train['shop_id'].astype('category')
+            X_train['item_category_id'] = X_train['item_category_id'].astype('category')
+            X_train['city'] = X_train['city'].astype('category')
+            X_train['super_category'] = X_train['super_category'].astype('category')
             
-                X_train = X_train.drop('item_id', axis=1)
-                X_train['shop_id'] = X_train['shop_id'].astype('category')
-                X_train['item_category_id'] = X_train['item_category_id'].astype('category')
-                X_train['city'] = X_train['city'].astype('category')
-                X_train['super_category'] = X_train['super_category'].astype('category')
-                
-                pass
+            pass
+        
+        
             
-            
-                
-            Y_train = np.clip(Y_train,0,20)
-            
-            if X_train.empty:
-                print('None')
-                continue
-            
-            #X_train = make_X_lag_format(X_train, val_month-1)#-1 because this dbn is for validation, dbn for train is 1 less
-            
-            #X_train=select_columns(X_train, val_month-1)
-            
-            
-            columns_order=X_train.columns
+        Y_train = np.clip(Y_train,0,20)
+        
+        if X_train.empty:
+            print('None')
+            continue
+    
+        
+        columns_order=X_train.columns
 
-            t2_data_prep = time.time()
-            #print(f'data preparation on batch {c} time:',t2_data_prep-t1_data_prep)
-            #print('model fitting started')
-            t1_fit = time.time()
-            if c == 0:
-                pass
-                #print('train columns')
-                #print(X_train.columns)
-            if type(model) in [Lasso,SVC]:
+        t2_data_prep = time.time()
+        #print(f'data preparation on batch {c} time:',t2_data_prep-t1_data_prep)
+        #print('model fitting started')
+        t1_fit = time.time()
+        if c == 0:
+            pass
+            #print('train columns')
+            #print(X_train.columns)
+        if type(model) in [Lasso,SVC]:
+            model.fit(X_train, Y_train)
+            y_train_pred = model.predict(X_train)
+        
+        elif type(model) == LGBMRegressor:
+            if first:
                 model.fit(X_train, Y_train)
-                y_train_pred = model.predict(X_train)
-            
-            elif type(model) == LGBMRegressor:
-                if first:
-                    model.fit(X_train, Y_train)
-                    first=False
-                else:
-                    model.fit(X_train, Y_train, init_model=model)
-                y_train_pred = model.predict(X_train, validate_features=True)
+                first=False
+            else:
+                model.fit(X_train, Y_train, init_model=model)
+            y_train_pred = model.predict(X_train, validate_features=True)
 
-            elif type(model) == xgb.XGBRegressor:
-                if first:
-                    model=model.fit(X_train, Y_train)
-                    first=False
-                else:
-                    print(model.get_booster())
-                    #Works not as expected
-                    model=model.fit(X_train, Y_train, xgb_model=model.get_booster())
-                    
-                    
-                y_train_pred = model.predict(X_train)  
+        elif type(model) == xgb.XGBRegressor:
+            if first:
+                model=model.fit(X_train, Y_train)
+                first=False
+            else:
+                print(model.get_booster())
+                #Works not as expected
+                model=model.fit(X_train, Y_train, xgb_model=model.get_booster())
+                
+                
+            y_train_pred = model.predict(X_train)  
 
-            elif type(model) == RandomForestRegressor:
-                model.fit(X_train, Y_train)
-                y_train_pred = model.predict(X_train)  
-            t2_fit = time.time()
-            #print(f'model fitting time on batch {c},',t2_fit - t1_fit)
-            
-            Y_true_l.append(Y_train)
-            preds_l.append(y_train_pred)
-            t2_batch = time.time()
-            print(f'train on batch {c} time,',t2_batch-t1_batch)
-            
-            if shop_item_pairs_in_dbn is not None:
-                val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
-                print(f'val score after batch {c}', val_error)
+        elif type(model) == RandomForestRegressor:
+            model.fit(X_train, Y_train)
+            y_train_pred = model.predict(X_train)  
+        t2_fit = time.time()
+        #print(f'model fitting time on batch {c},',t2_fit - t1_fit)
+        
+        Y_true_l.append(Y_train)
+        preds_l.append(y_train_pred)
+        t2_batch = time.time()
+        print(f'train on batch {c} time,',t2_batch-t1_batch)
+        
+        if shop_item_pairs_in_dbn is not None:
+            val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
+            print(f'val score after batch {c}', val_error)
 
-            c+=1
+        c+=1
+
+        if c == batches_for_training:
+            break
         
     train_rmse = root_mean_squared_error(pd.concat(Y_true_l), np.concat(preds_l))
     print('train_rmse, ',train_rmse)
@@ -581,7 +622,7 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
         val_month (int): Month used for validation.
         columns_order (list[str]): Order of feature columns.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
-        batch_size_to_read (int): Chunk size for reading data.
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
 
     Returns:
         tuple: 
@@ -659,10 +700,9 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
 
     return val_preds, val_rmse
 
-def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
+def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training,experiment_id):
     """
     Runs model training and validation across multiple months and computes RMSE for each month.
-    Note: epochs must be set to 1. Otherwise good results are not guaranteed
     Note: batch learning works properly only for LGBMRegressor. Using another model with batch_size<=len(shop_item_pairs_WITH_PREV_in_dbn[dbn]) will lead to incorrect results
     Args:
         model (object): Machine learning model.
@@ -670,9 +710,9 @@ def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_
         val_monthes (list): List of months for validation.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
         shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int,int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
-        batch_size_to_read (int): Chunk size for reading data from csv.
-        epochs (int): Number of epochs for training.
-
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
+        batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
+        experiment_id(string):
     Returns:
         tuple: 
             - val_errors (list[np.array[float]]): List of RMSE values for each month.
@@ -686,26 +726,56 @@ def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_
     
     for val_month in val_monthes:
 
-        print(f'month {val_month} started')
-        t1 = time.time()
-        
-        print('month', val_month%12)
+        run_name=f'validation on {val_month}'
 
-        model,columns_order = train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs,shop_item_pairs_in_dbn)
-
-        t2=time.time()
-        print(f'model training on {val_month} time,',t2-t1)
-        print('feature importances, ')
-        print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
+        model = LGBMRegressor(
+            num_leaves=params['num_leaves'],
+            n_estimators=params['n_estimators'],
+            learning_rate=params['learning_rate'],
+            verbose=-1,
+            n_jobs=multiprocessing.cpu_count()
+        )
         
-        t1 = time.time()
+        with mlflow.start_run(experiment_id=experiment_id,run_name=run_name, nested=True):
+            print(f'month {val_month} started')
+            t1 = time.time()
+            
+            print('month', val_month%12)
 
-        val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read)
-        t2 = time.time()
-        print(f'validation time on month {val_month},',t2-t1)
-        val_errors.append(val_error)
-        val_preds.append(val_pred)
-        
+            mlflow.log_params(params)
+
+            model,columns_order = train_model(
+                model, 
+                batch_size, 
+                val_month,
+                shop_item_pairs_WITH_PREV_in_dbn,
+                batch_size_to_read,
+                batches_for_training,
+                shop_item_pairs_in_dbn = None
+            )
+
+            t2=time.time()
+            print(f'model training on {val_month} time,',t2-t1)
+            print('feature importances, ')
+            print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
+            
+            t1 = time.time()
+
+            val_pred, val_error = validate_model(
+                model,
+                batch_size,
+                val_month,
+                columns_order,
+                shop_item_pairs_in_dbn,
+                batch_size_to_read
+            )
+
+            t2 = time.time()
+            print(f'validation time on month {val_month},',t2-t1)
+            val_errors.append(val_error)
+            val_preds.append(val_pred)
+            
+            mlflow.log_metric('rmse',val_error)
 
     return val_errors, val_preds
 
@@ -719,7 +789,7 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
         batch_size (int): Number of samples per batch.
         columns_order (list): Ordered list of feature columns.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
-        batch_size_to_read (int): Chunk size for reading data from csv.
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
 
     Returns:
         pd.DataFrame: Submission-ready DataFrame containing predictions.
@@ -781,7 +851,7 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
     data_test = data_test.merge(PREDICTION,on=['shop_id','item_id'])[['ID','item_cnt_month']]
     return data_test
 
-def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs):
+def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,batches_for_training):
     """
     Pipeline for both training model and creating submission
     Note: batch learning works properly only for LGBMRegressor. Using another model with batch_size<=len(shop_item_pairs_WITH_PREV_in_dbn[dbn]) will lead to incorrect results
@@ -791,8 +861,8 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
         batch_size (int): Number of samples per batch.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
         shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int,int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
-        batch_size_to_read (int): Chunk size for reading data from csv.
-        epochs (int): epocs
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
+        batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
 
     Returns:
         pd.DataFrame: Submission-ready DataFrame containing predictions.
@@ -803,7 +873,7 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
 
     #print(f'model training on 34 started')
     t1 = time.time()
-    model,columns_order = train_model(model,batch_size, 34, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs, None)
+    model,columns_order = train_model(model,batch_size, 34, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training,None)
     t2 = time.time()
     print('training model time,',t2-t1)
     print('Feature importnaces in lgb:')
@@ -818,8 +888,29 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
 
     return data_test
     
+def get_or_create_experiment(experiment_name):
+    """
+    Retrieve the ID of an existing MLflow experiment or create a new one if it doesn't exist.
 
+    This function checks if an experiment with the given name exists within MLflow.
+    If it does, the function returns its ID. If not, it creates a new experiment
+    with the provided name and returns its ID.
+
+    Parameters:
+    - experiment_name (str): Name of the MLflow experiment.
+
+    Returns:
+    - str: ID of the existing or newly created MLflow experiment.
+    """
+
+    if experiment := mlflow.get_experiment_by_name(experiment_name):
+        return experiment.experiment_id
+    else:
+        return mlflow.create_experiment(experiment_name)
+    
 if __name__ == '__main__':
+    
+    
 
     data_train = pd.read_csv('../data_cleaned/data_train.csv')
     test = pd.read_csv('../data_cleaned/test.csv')
@@ -830,40 +921,68 @@ if __name__ == '__main__':
     shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn = prepare_past_ID_s_CARTESIAN(data_train)
 
 
-    val_monthes=range(22,34)
 
+    #parametrs which doesnt affect training
+    batch_size_to_read=150_000 # the more batches_for_training - the less should be batch_size_to_read to prevent memory error
 
+    #parametrs which affect number of estimators:
 
-    batch_size_to_read=200000000 #Should be set this to large number as there is no need for batching
+    #using batches_for_training > 1 doesnt improve metrics much
 
+    batches_for_training=3#Set this to > 1 only for submission creation
 
-    n_estimators = 500
-    batch_size=3000000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
-    epochs=1#Optionally set this to > 1 only for submission. This doesn't improve metric much but takes long time
-    """
-    example (dbn=22, batch_size=3000000):
-    epoch1 :1.0058996076950135, 0.9606287756188305, 0.9596576049773098
-    epoch2: 0.9590049074136094, 0.956247643685067, 0.9622789269428891
-    """
+    batch_size=3_000_000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
 
-    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=48, n_estimators = n_estimators,  learning_rate=0.0065)
+    
+    #model parameters
+    num_leaves=48
+    n_estimators=500
+    learning_rate=0.0065
 
     is_create_submission=False
-
+    
     if not is_create_submission:
+
+        
+        val_monthes=range(23,34)
+
         print('validation started...')
-        val_errors, val_preds = validate_ML(
-                                            model=model,
-                                            batch_size=batch_size,
-                                            val_monthes=val_monthes, 
-                                            shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
-                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
-                                            batch_size_to_read=batch_size_to_read,
-                                            epochs=epochs
-        )
-        print(val_errors)
+        
+        
+        val_monthes_str = [str(i) for i in val_monthes]
+
+        run_name=f'Run_{'_'.join(val_monthes_str)}_monthes'
+        
+        experiment_id=get_or_create_experiment('Validation boosting')
+        
+        mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
+        
+        with mlflow.start_run(run_id='3fc206d3dac04bbe801bd1df106ce1fd'):
+
+            params = {'num_leaves':num_leaves,
+                      'n_estimators':n_estimators,
+                      'learning_rate':learning_rate,
+                      'batch_size_to_read':batch_size_to_read,
+                      'batches_for_training':batches_for_training,
+                      'batch_size':batch_size
+                      }
+            mlflow.log_params(params)
+            val_errors, val_preds = validate_ML(
+                                                params,
+                                                batch_size=batch_size,
+                                                val_monthes=val_monthes, 
+                                                shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
+                                                shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
+                                                batch_size_to_read=batch_size_to_read,
+                                                batches_for_training=batches_for_training,
+                                                experiment_id=experiment_id
+            )
+            mlflow.log_metric('rmse',np.mean(val_errors))
+            print(val_errors)
 
     else:
+        model = LGBMRegressor(verbose=-1,n_jobs=multiprocessing.cpu_count(), num_leaves=num_leaves, n_estimators = n_estimators,  learning_rate=learning_rate)
+        
         print('submission creation started...')
         submission = create_submission_pipeline(merged=None, 
                                             model=model,
@@ -871,7 +990,7 @@ if __name__ == '__main__':
                                             shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
                                             shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
                                             batch_size_to_read=batch_size_to_read,
-                                            epochs=epochs
+                                            batches_for_training=batches_for_training
                                             )
         submission.to_csv('submission.csv', index=False)
         print(submission.describe())

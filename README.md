@@ -30,12 +30,12 @@ The script `validation_boosting.py` handles data preprocessing for training and 
    - Creates indexes for batches. Return list (each element - one date_block_num), where each element is list (each element - tuple(start and end indexes for batch)) 
 
 5. **`create_batch_train`**
-   - Returns (X,y). Batch size is not stable. Some rows from merged.csv may be ignored during training since each batch must contain same number of samples.
+   - Returns (X,y). Batch size is not stable. Some rows from merged.csv may be ignored during training since each batch must contain same number of samples. Uses multiprocessing to create parts of batches with diffeerent date block nums on separate cores  
 
-6. **`train_model`** (parametrs are (model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs))
-   - Function for  training model by batches. batch_size parameter is used to calculate total number of batches, which is then used to calculate batch size for each element from shop_item_pairs_WITH_PREV_in_dbn. When calculating this, floor division is used since each batch must contain same number of samples.
+6. **`train_model`** (parametrs are (model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,batches_for_training,shop_item_pairs_in_dbn))
+   - Function for  training model by batches.
 
-> **Note**: `batch_size,  epochs and n_estimators` parameters affect number of estimators built by LGBMRegressor. Total number of estimators for month k will be: `epochs*n_estimators*(total_number_of_samples_for_traing // batch_size)`, where total_nunber_of_samples_for_traing can be calculated as `sum(lengthes[k-last_monthes_to_take_in_train+1:k+1])`
+> **Note**: `batches_for_training and n_estimators` parameters affect number of estimators built by LGBMRegressor. Total number of estimators for month k will be: `batches_for_training*n_estimators
 
 ### Train and Validation Set Creation
 To validate the model on a specific month `k`:
