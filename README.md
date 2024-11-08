@@ -1,7 +1,6 @@
 # FutureSalesPrediction
-EDA_tendencies.ipynb:
-1) Exploring dependency between features and target
-2) Exploring global tendencies
-EDA_lags.ipynb:
-1) Exploring importance of lags
-2) Exploring items which weren't sold in previos month
+EDA_general.ipynb exploring trends, seasonality and features which have some affect on target
+
+EDA_anomalies.ipynb exploring outliers seen in EDA_general.ipynb
+
+EDA_lags.ipynb explores relationshops between different lags
