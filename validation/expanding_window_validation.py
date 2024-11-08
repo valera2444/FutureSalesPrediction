@@ -17,7 +17,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Lasso
 from sklearn.linear_model import Ridge
 from sklearn.linear_model import LinearRegression
-
+import multiprocessing
 import time
 
 #np.random.seed(42)
@@ -318,6 +318,52 @@ def sample_indexes(shop_item_pairs_WITH_PREV_in_dbn, number_of_batches):
 
     return to_ret
 
+def prepare_batch_per_dbn(dbn, dbn_inner,last_monthes_to_take_in_train, shop_item_pairs_WITH_PREV_in_dbn,idxs,batch_size_to_read):
+    """
+    Function to execute on a single process (creates part of batch for one date block num)
+    Args:
+        dbn (int): current date block num
+        dbn_inner (int): index of dbn in inner loop in range(last_monthes_to_take_in_train)
+        last_monthes_to_take_in_train (_type_): _description_
+        shop_item_pairs_WITH_PREV_in_dbn (_type_): _description_
+        idxs (): indexes for shop_item_pairs_WITH_PREV_in_dbn for current date block num and batch
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
+
+    Returns:
+        list: list of X,Y for current date_block_num
+    """
+    curr_dbn = ((dbn_inner+1) - last_monthes_to_take_in_train) + dbn # in [dbn-last_monthes_to_take_in_train+1,dbn]
+    #idxs[dbn_inner] contains batch indexes for dbn_inner block(this array contains elements for [dbn-last_monthes_to_take_in_train+1,dbn] date_block_nums
+    
+    train = shop_item_pairs_WITH_PREV_in_dbn[idxs[0] : idxs[1] ]
+
+    
+    columns = select_columns_for_reading(SOURCE_PATH,curr_dbn-1)
+    #(dbn-1) because this dbn is for validation, dbn for train is 1 less
+
+    merged = pd.read_csv('data/merged.csv', chunksize=batch_size_to_read, skipinitialspace=True, usecols=columns)
+    l_sum = 0
+    l_x=[]
+    l_y=[]
+    for chunck in merged:#split merged into chuncks
+        
+        l =  prepare_data_train_boosting(chunck,train, curr_dbn) 
+
+
+        l_0 = make_X_lag_format(l[0], curr_dbn-1)#-1 because this dbn is for validation, dbn for train is 1 less
+
+        l_0=append_some_columns(l_0, curr_dbn-1)
+        
+        l_sum += len(l[0])
+        l_x.append( l_0 )
+        l_y. append(l[1])
+    
+
+    l_x = pd.concat(l_x, copy=False)
+    l_y = pd.concat(l_y, copy=False)
+    return [l_x, l_y]
+
+
 def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_size_to_read):
     """
     Creates training batches for date_block_num.
@@ -326,7 +372,7 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
         batch_size (int): Number of samples per batch.
         dbn (int): Date block number.
         shop_item_pairs_WITH_PREV_in_dbn (np.array[np.array[np.array[int]]]):  Accumulated cartesian products for each time block.
-        batch_size_to_read (int): Chunk size for reading data from csv.
+        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
 
     Yields:
         tuple: 
@@ -343,48 +389,43 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
     idxs = sample_indexes(shop_item_pairs_WITH_PREV_in_dbn[dbn-last_monthes_to_take_in_train+1:dbn+1],number_of_batches)
     print('total batches,',number_of_batches)
     for batch_number in range(number_of_batches):
-        dbns = []
-        batch = []
+        
         l_x=[]
         l_y=[]
         t1 = time.time()
         #This loop enables to includa data from different monthes in one batch
-        for dbn_inner in range(last_monthes_to_take_in_train):
-            curr_dbn = ((dbn_inner+1) - last_monthes_to_take_in_train) + dbn # in [dbn-last_monthes_to_take_in_train+1,dbn]
-            #idxs[dbn_inner] contains batch indexes for dbn_inner block(this array contains elements for [dbn-last_monthes_to_take_in_train+1,dbn] date_block_nums
-            
-            train = shop_item_pairs_WITH_PREV_in_dbn[curr_dbn][idxs[dbn_inner][batch_number][0] : idxs[dbn_inner][batch_number][1] ]
+        with multiprocessing.Pool( processes=multiprocessing.cpu_count() ) as pool:
+            result  = pool.starmap(prepare_batch_per_dbn, \
+                                    [[dbn, 
+                                      dbn_inner,
+                                      last_monthes_to_take_in_train, 
+                                      shop_item_pairs_WITH_PREV_in_dbn[((dbn_inner+1) - last_monthes_to_take_in_train) + dbn ],
+                                      idxs[dbn_inner][batch_number],
+                                      batch_size_to_read] for dbn_inner in range(last_monthes_to_take_in_train)])
 
-            
-            columns = select_columns_for_reading(SOURCE_PATH,curr_dbn-1)
-            #(dbn-1) because this dbn is for validation, dbn for train is 1 less
-            merged = pd.read_csv('data/merged.csv', skipinitialspace=True, usecols=columns)
-            
-            
-
-            l_sum = 0
-            
-            l =  prepare_data_train_boosting(merged,train,curr_dbn) 
-            l_sum += len(l[0])
-            l_0 = make_X_lag_format(l[0], curr_dbn-1)#-1 because this dbn is for validation, dbn for train is 1 less
-
-            l_0=append_some_columns(l_0, curr_dbn-1)
-
-            l_x.append( l_0 )
-            l_y. append(l[1])
-            
-            if len(l_x) == 0:
-                yield [None, None]
-
-            #print(f'create_batch_train, dbn {curr_dbn}:',l_sum)
+        #print(result)
+        l_x = [result[i][0] for i in range(len(result))]
+        l_y = [result[i][1] for i in range(len(result))]
+        #print(l_x)
         t2 = time.time()
         print('batch creation time [create_batch_train, 212],',t2-t1)
                 
-        l_x = pd.concat(l_x)
-        l_y = pd.concat(l_y)
+        
+        l_x = pd.concat(l_x, copy=False)
+        l_y = pd.concat(l_y, copy=False)
+
+        l_x.reset_index(drop=True, inplace=True)
+        l_y.reset_index(drop=True, inplace=True)
+
+        index_perm = np.random.permutation(l_x.index)[:batch_size]
+
+        l_x=l_x.iloc[index_perm]
+        l_y = l_y.iloc[index_perm]
+
         print('batch size', len(l_x))
         print(f'batch {batch_number} memory usage',np.sum(l_x.memory_usage()) / 10**6)
         yield [l_x, l_y]#, test
+
 
 def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read):
     """
@@ -708,7 +749,15 @@ def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_
             
             print('month', val_month%12)
 
-            model,columns_order = train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,epochs,shop_item_pairs_in_dbn,batches_for_training,experiment_id)
+            model,columns_order = train_model(model,
+                                              batch_size,
+                                              val_month,
+                                              shop_item_pairs_WITH_PREV_in_dbn,
+                                              batch_size_to_read,
+                                              epochs,
+                                              shop_item_pairs_in_dbn,
+                                              batches_for_training,
+                                              experiment_id)
 
             t2=time.time()
             print(f'model training on {val_month} time,',t2-t1)
@@ -728,7 +777,6 @@ def validate_ML(model,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_
             mlflow.log_metric('rmse',np.mean(val_error))
             mlflow.log_param('batch_size',batch_size)
             mlflow.log_param('batches_for_training',batches_for_training)
-            mlflow.log_param('item_id_included',True)
 
         
 
@@ -878,10 +926,10 @@ if __name__ == '__main__':
 
 
 
-    batch_size_to_read=200000000 #Should be set this to large number as there is no need for batching
+    batch_size_to_read=200_000 #Should be set this to large number as there is no need for batching
     batches_for_training=2
     n_estimators = 500
-    batch_size=3000000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
+    batch_size=3_000_000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
     epochs=1#Optionally set this to > 1 only for submission. This doesn't improve metric much but takes long time
     """
     example (dbn=22, batch_size=3000000):
@@ -889,11 +937,11 @@ if __name__ == '__main__':
     epoch2: 0.9590049074136094, 0.956247643685067, 0.9622789269428891
     """
 
-    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=48, n_estimators = n_estimators,  learning_rate=0.0065)
+    model = LGBMRegressor(verbose=-1,n_jobs=8, num_leaves=32, n_estimators = n_estimators,  learning_rate=0.05)
 
     experiment_id=get_or_create_experiment('LGBM expanding window validation')
 
-    run_name='Run_with_item_id'
+    run_name='Run_all_monthes'
 
     mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
 
