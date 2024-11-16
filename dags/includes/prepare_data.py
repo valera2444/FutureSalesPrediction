@@ -10,9 +10,6 @@ from pathlib import Path
 
 import click
 
-import argparse
-
-import mlflow
 
 def prepare_past_ID_s_CARTESIAN(data_train):
     """
@@ -551,7 +548,9 @@ def create_item_shop_city_category_super_category(shop_city_pairs, merged):
     
     return merged[['shop_id','item_id','item_category_id','city','super_category']]
 
-
+@click.command()
+@click.option('--source_path')
+@click.option('--destination_path')
 def run_prepare_data(source_path, destination_path):
     """
     
@@ -604,17 +603,3 @@ def run_prepare_data(source_path, destination_path):
         first = False
     total_time2 = time.time()
     print('total data preparation time,',total_time2-total_time1)
-
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--source_path', type=str)
-    parser.add_argument('--destination_path', type=str)
-    args = parser.parse_args()
-
-    mlflow.set_tracking_uri(uri="http://mlflow:5000")
-    with mlflow.start_run(run_name='prepare_data', nested=True):
-        mlflow.set_tag("Features","item id included")
-        
-    run_prepare_data(args.source_path, args.destination_path)

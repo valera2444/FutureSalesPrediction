@@ -2,10 +2,9 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import click
-import argparse
-import mlflow
-import os
-
+@click.command()
+@click.option('--source_path')
+@click.option('--destination_path')
 def run_etl(source_path, destination_path):
     """
     runs etl and writes cleaned data into data_cleaned/{file_name}.csv
@@ -44,41 +43,3 @@ def run_etl(source_path, destination_path):
     item_cat.to_csv(f'{destination_path}/item_categories.csv', mode='w',index=False)
     items.to_csv(f'{destination_path}/items.csv', mode='w',index=False)
     data_test.to_csv(f'{destination_path}/test.csv', mode='w',index=False)
-
-def get_or_create_experiment(experiment_name):
-    """
-    Retrieve the ID of an existing MLflow experiment or create a new one if it doesn't exist.
-
-    This function checks if an experiment with the given name exists within MLflow.
-    If it does, the function returns its ID. If not, it creates a new experiment
-    with the provided name and returns its ID
-
-
-    Parameters:
-    - experiment_name (str): Name of the MLflow experiment.
-
-    Returns:
-    - str: ID of the existing or newly created MLflow experiment.
-    """
-
-    if experiment := mlflow.get_experiment_by_name(experiment_name):
-        return experiment.experiment_id
-    else:
-        return mlflow.create_experiment(experiment_name)
-    
-
-
-if __name__ == '__main__':
-
-    #If omit this line, running wuth docker gives error. If using MLFlow Projects, git is required?
-    mlflow.set_tracking_uri(uri="http://mlflow:5000")
-    exp = get_or_create_experiment('LGB')
-    with mlflow.start_run(experiment_id=exp,run_name='etl', nested=True):
-        mlflow.set_tag("Features","item id included")
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--source_path', type=str)
-    parser.add_argument('--destination_path', type=str)
-
-    args = parser.parse_args()
-
-    run_etl(args.source_path, args.destination_path)

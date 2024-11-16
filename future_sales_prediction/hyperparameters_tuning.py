@@ -23,6 +23,12 @@ import optuna
 
 import time
 
+import click
+
+import pickle
+
+import argparse
+
 #np.random.seed(42)
 
 SOURCE_PATH = None
@@ -839,4 +845,19 @@ def run_optimizing(path_for_merged, path_data_cleaned, n_trials):
 
     study.optimize(objective_f, n_trials=n_trials)
 
+    with open('saved_dictionary.pkl', 'wb') as f:
+        pickle.dump(study.best_params, f)
+
     return study.best_params
+
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--path_for_merged', type=str)
+    parser.add_argument('--path_data_cleaned', type=str)
+    parser.add_argument('--n_trials', type=int)
+
+    args = parser.parse_args()
+
+    run_optimizing(args.path_for_merged, args.path_data_cleaned, args.n_trials)

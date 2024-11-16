@@ -15,16 +15,21 @@ from sklearn.linear_model import LinearRegression
 
 import multiprocessing
 
+
+from functools import partial
+import logging
+import optuna
+
+
 import time
-
-import pickle
-
 
 import click
 
-import argparse
+import pickle
+
 #np.random.seed(42)
 
+SOURCE_PATH = None
 def prepare_past_ID_s(data_train):
     """
     This function doesn't used
@@ -338,7 +343,6 @@ def prepare_batch_per_dbn(dbn, dbn_inner,last_monthes_to_take_in_train, shop_ite
     
     train = shop_item_pairs_WITH_PREV_in_dbn[idxs[0] : idxs[1] ]
 
-
     columns = select_columns_for_reading(f'{source_path}/merged.csv',curr_dbn-1)
     #(dbn-1) because this dbn is for validation, dbn for train is 1 less
 
@@ -453,10 +457,9 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
     
     chunk_num =  len(cartesian_product)// batch_size if len(cartesian_product)%batch_size==0  else   len(cartesian_product) // batch_size + 1#MAY BE NEED TO CORRECT
 
-
     columns = select_columns_for_reading(f'{source_path}/merged.csv', dbn)
 
-    
+
     for idx in range(chunk_num):
         merged = pd.read_csv(f'{source_path}/merged.csv', chunksize=batch_size_to_read, skipinitialspace=True, usecols=columns)
         l_x=[]
@@ -474,8 +477,8 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
         if len(l_x) == 0:
             yield [None, None]
         print('create_batch_val,243:',l_sum)
-        l_x = pd.concat(l_x, copy=False)
-        l_y = pd.concat(l_y, copy=False)
+        l_x = pd.concat(l_x)
+        l_y = pd.concat(l_y)
 
 
         yield [l_x,l_y]#, test
@@ -578,6 +581,7 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
                 model.fit(X_train, Y_train, init_model=model)
             y_train_pred = model.predict(X_train, validate_features=True)
 
+        
 
         elif type(model) == RandomForestRegressor:
             model.fit(X_train, Y_train)
@@ -669,6 +673,8 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
         elif type(model) ==LGBMRegressor:
             y_val_pred = model.predict(X_val, validate_features=True)#lgb - validate features
 
+           
+
         elif type(model) == RandomForestRegressor:
             y_val_pred = model.predict(X_val)  
 
@@ -690,12 +696,12 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
 
     return val_preds, val_rmse
 
-def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training, source_path):
+def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training,source_path):
     """
     Runs model training and validation across multiple months and computes RMSE for each month.
     Note: batch learning works properly only for LGBMRegressor. Using another model with batch_size<=len(shop_item_pairs_WITH_PREV_in_dbn[dbn]) will lead to incorrect results
     Args:
-        params (dict): params for machine learning model.
+        params (dict): parameters for machine learning model.
         batch_size (int): Number of samples per batch.
         val_monthes (list): List of months for validation.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
@@ -714,22 +720,17 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
     
     
     for val_month in val_monthes:
-
         run_name=f'validation on {val_month}'
 
-        model = LGBMRegressor(
-            num_leaves=params['num_leaves'],
-            n_estimators=params['n_estimators'],
-            learning_rate=params['learning_rate'],
-            verbose=-1,
-            n_jobs=multiprocessing.cpu_count()
-        )
+        model = LGBMRegressor(verbose=-1,n_jobs=multiprocessing.cpu_count(), num_leaves=params['num_leaves'],
+                               n_estimators = params['n_estimators'],
+                                learning_rate=params['lr'])
+        
+        
         print(f'month {val_month} started')
         t1 = time.time()
         
         print('month', val_month%12)
-
-
         model,columns_order = train_model(
             model, 
             batch_size, 
@@ -755,135 +756,75 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
             columns_order,
             shop_item_pairs_in_dbn,
             batch_size_to_read,
-            source_path=source_path
+            source_path
         )
 
         t2 = time.time()
         print(f'validation time on month {val_month},',t2-t1)
         val_errors.append(val_error)
         val_preds.append(val_pred)
-        
-
+            
+            
+            
     return val_errors, val_preds
 
-def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path):
-    """
-    Generates predictions for the test dataset and prepares a submission file.
+
     
+
+
+def objective(trial,val_monthes,shop_item_pairs_in_dbn,shop_item_pairs_WITH_PREV_in_dbn,source_path):
+    val_monthes_str = [str(i) for i in val_monthes]
+    lr = trial.suggest_float('lr', low=0.002, high = 0.07,log=True)
+    num_leaves = trial.suggest_int('num_leaves', low=32, high = 256,step=50)
+    n_estimators=trial.suggest_int('n_estimators', low=100, high = 700,step=100)
+
+    #parametrs which doesnt affect training
+    batch_size_to_read=200_000 # the more batches_for_training - the less should be batch_size_to_read to prevent memory error
+
+    #parametrs which affect number of estimators:
+    batches_for_training=1#each batch increases number of estimators with n_estimators
+    batch_size=3_000_000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
+
+
+    print('validation started...')
+    params = defaultdict()
+    params['trial'] = trial
+    params['lr'] = lr
+    params['num_leaves'] = num_leaves
+    params['n_estimators'] = n_estimators
+    params['batch_size']=batch_size
+    params['batches_for_training']=batches_for_training
+    params['batch_size_to_read']=batch_size_to_read
+    val_errors, val_preds = validate_ML(
+                                        params,
+                                        batch_size=batch_size,
+                                        val_monthes=val_monthes, 
+                                        shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
+                                        shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
+                                        batch_size_to_read=batch_size_to_read,
+                                        batches_for_training=batches_for_training,
+                                        source_path=source_path
+                                        )
+
+    print('lr:'+str(lr) + ' ' + str(val_errors) + '\n')
+    
+    return np.mean(val_errors)
+
+@click.command()
+@click.option('--path_for_merged')
+@click.option('--path_data_cleaned')
+@click.option('--n_trials')
+def run_optimizing(path_for_merged, path_data_cleaned, n_trials):
+    """
+    Function for hyperparameters tuning 
 
     Args:
-        model (object): Trained machine learning model.
-        batch_size (int): Number of samples per batch.
-        columns_order (list): Ordered list of feature columns.
-        shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
-        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
-
-    Returns:
-        pd.DataFrame: Submission-ready DataFrame containing predictions.
+        path_for_merged (str): path to the file created by prepare_data.py
+        path_data_cleaned (str): path to the directory with data creaed by etl.py
+        n_trials (int): number of iterations to run optuna
     """
-    val_month = 34
-    test = pd.read_csv(f'{cleaned_path}/test.csv')
     
-    data_test = test
-    PREDICTION = pd.DataFrame(columns=['shop_id','item_id','item_cnt_month'])
-    Y_true_l=[]
-    for X_val, Y_val in create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn,batch_size_to_read,source_path):
-        shop_id = X_val.shop_id
-        item_id = X_val.item_id
-        if type(model) in [sklearn.linear_model._coordinate_descent.Lasso,
-                          SVC]:
-            
-            X_val.drop('shop_id', inplace=True, axis=1) 
-            X_val.drop('item_category_id', inplace=True, axis=1) 
-            X_val.drop('item_id', inplace=True, axis=1) 
-            
-
-        elif type(model) ==LGBMRegressor:
-            
-            X_val = X_val.drop('item_id', axis=1)
-            X_val['shop_id'] = X_val['shop_id'].astype('category')
-            X_val['item_category_id'] = X_val['item_category_id'].astype('category')
-            X_val['city'] = X_val['city'].astype('category')
-            X_val['super_category'] = X_val['super_category'].astype('category')
-                    
-            pass
-
-        
-        if X_val is None:
-            continue
-            
-        Y_val = np.clip(Y_val,0,20)
-        
-        if X_val.empty:
-            print('None')
-            continue
-            
-        
-        X_val = make_X_lag_format(X_val, val_month)
-
-        X_val=append_some_columns(X_val, val_month)
-        X_val = X_val[columns_order]
-
-        
-        y_val_pred=model.predict(X_val)
-        y_val_pred = np.clip(y_val_pred,0,20)
-        Y_true_l.append(Y_val)
-        
-        
-        app = pd.DataFrame({'item_id':item_id,'shop_id': shop_id, 'item_cnt_month':y_val_pred})
-        PREDICTION = pd.concat([PREDICTION, app],ignore_index=True)
-
- 
-    
-    data_test = data_test.merge(PREDICTION,on=['shop_id','item_id'])[['ID','item_cnt_month']]
-    return data_test
-
-def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,batches_for_training,source_path,cleaned_path):
-    """
-    Pipeline for both training model and creating submission
-    Note: batch learning works properly only for LGBMRegressor. Using another model with batch_size<=len(shop_item_pairs_WITH_PREV_in_dbn[dbn]) will lead to incorrect results
-    Args:
-        merged (_type_): not used
-        model (object): Trained machine learning model.
-        batch_size (int): Number of samples per batch.
-        shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
-        shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int,int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
-        batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
-        batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
-
-    Returns:
-        pd.DataFrame: Submission-ready DataFrame containing predictions.
-    """
-    val_errors = []
-    
-    val_errors=[]
-
-    #print(f'model training on 34 started')
-    t1 = time.time()
-    model,columns_order = train_model(model,batch_size, 34, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training,None,source_path)
-    t2 = time.time()
-    print('training model time,',t2-t1)
-    print('Feature importnaces in lgb:')
-    
-    print(model.feature_names_in_[np.argsort(model.feature_importances_)][::-1])
-    #print('n_estimators:', model.n_estimators_)
-    #print('submission creation started')
-    t1 = time.time()
-    data_test = create_submission(model,batch_size,columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path)
-    t2 = time.time()
-    print('submission creation time,', t2-t1)
-
-    return data_test
-    
-    
-def run_create_submission(path_for_merged, path_data_cleaned):
-    """
-    Function for expanding window validation or creating submission
-
-    Args:
-        path_for_merged (str): path to the folder where created by prepare_data.py file stored
-        path_data_cleaned (str): path to the folder where created by etl.py file stored
-    """
+   
     data_train = pd.read_csv(f'{path_data_cleaned}/data_train.csv')
     test = pd.read_csv(f'{path_data_cleaned}/test.csv')
     test['date_block_num'] = 34
@@ -892,81 +833,21 @@ def run_create_submission(path_for_merged, path_data_cleaned):
 
     shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn = prepare_past_ID_s_CARTESIAN(data_train)
 
-    #parametrs which doesnt affect training
-    batch_size_to_read=150_000 # the more batches_for_training - the less should be batch_size_to_read to prevent memory error
+    val_monthes=[23,30,33]
 
-    #parametrs which affect number of estimators:
+    val_monthes_str = [str(i) for i in val_monthes]
 
-    #using batches_for_training > 1 doesnt improve metrics much
+    objective_f = partial(objective,
+                         val_monthes = val_monthes,
+                         shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
+                         shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
+                         source_path=path_for_merged)
 
-    batches_for_training=2
+    study = optuna.create_study(direction="minimize")
 
-    batch_size=3_000_000 
-    
+    study.optimize(objective_f, n_trials=n_trials)
 
-    with open('saved_dictionary.pkl', 'rb') as f:
-        params = pickle.load(f)
+    with open('saved_dictionary.pkl', 'wb') as f:
+        pickle.dump(study.best_params, f)
 
-    #model parameters
-    num_leaves=params['num_leaves']
-    n_estimators=params['n_estimators']
-    learning_rate=params['lr']
-
-    is_create_submission=True
-    
-    if not is_create_submission:
-
-        
-        val_monthes=range(22,34)
-
-        print('validation started...')
-        
-        
-        val_monthes_str = [str(i) for i in val_monthes]
-
-        params = {'num_leaves':num_leaves,
-                    'n_estimators':n_estimators,
-                    'learning_rate':learning_rate,
-                    'batch_size_to_read':batch_size_to_read,
-                    'batches_for_training':batches_for_training,
-                    'batch_size':batch_size
-                    }
-        val_errors, val_preds = validate_ML(
-                                            params,
-                                            batch_size=batch_size,
-                                            val_monthes=val_monthes, 
-                                            shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
-                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
-                                            batch_size_to_read=batch_size_to_read,
-                                            batches_for_training=batches_for_training,
-                                            source_path=path_for_merged
-        )
-        print(val_errors)
-
-    else:
-        model = LGBMRegressor(verbose=-1,n_jobs=multiprocessing.cpu_count(), num_leaves=num_leaves, n_estimators = n_estimators,  learning_rate=learning_rate)
-        
-        print('submission creation started...')
-        submission = create_submission_pipeline(merged=None, 
-                                            model=model,
-                                            batch_size=batch_size,
-                                            shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
-                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
-                                            batch_size_to_read=batch_size_to_read,
-                                            batches_for_training=batches_for_training,
-                                            source_path=path_for_merged,
-                                            cleaned_path=path_data_cleaned
-                                            )
-        submission.to_csv('submission.csv', index=False)
-        print(submission.describe())
-
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--path_for_merged', type=str)
-    parser.add_argument('--path_data_cleaned', type=str)
-
-    args = parser.parse_args()
-
-    run_create_submission(args.path_for_merged, args.path_data_cleaned)
+    return study.best_params

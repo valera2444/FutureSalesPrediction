@@ -21,8 +21,6 @@ import pickle
 
 
 import click
-
-import argparse
 #np.random.seed(42)
 
 def prepare_past_ID_s(data_train):
@@ -875,6 +873,9 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
 
     return data_test
     
+@click.command()
+@click.option('--path_for_merged')
+@click.option('--path_data_cleaned')
     
 def run_create_submission(path_for_merged, path_data_cleaned):
     """
@@ -959,14 +960,3 @@ def run_create_submission(path_for_merged, path_data_cleaned):
                                             )
         submission.to_csv('submission.csv', index=False)
         print(submission.describe())
-
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--path_for_merged', type=str)
-    parser.add_argument('--path_data_cleaned', type=str)
-
-    args = parser.parse_args()
-
-    run_create_submission(args.path_for_merged, args.path_data_cleaned)
