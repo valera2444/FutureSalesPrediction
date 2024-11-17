@@ -1,2 +1,6 @@
-FROM ghcr.io/mlflow/mlflow:v2.18.0rc0
-CMD mlflow ui --host 0.0.0.0 --port 5000
+
+FROM python:3.12-slim
+
+# Install python package
+COPY mlflow_requirements.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/mlflow_requirements.txt
