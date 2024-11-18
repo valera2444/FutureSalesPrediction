@@ -310,10 +310,16 @@ services:
     image: quay.io/minio/mc
     depends_on:
       - minio
-    volumes:
-      - ./minio/create-bucket.sh:/create-bucket.sh
-    entrypoint: /bin/sh
-    command: -c "chmod +x /create-bucket.sh && /create-bucket.sh"
+    
+    
+    #creating new bucket
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_ACCESS_KEY}) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc mb myminio/mlflow;
+      /usr/bin/mc policy set download myminio/mlflow;
+      exit 0;
+      "
     environment:
       - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
       - MINIO_ROOT_PASSWORD=${MINIO_SECRET_ACCESS_KEY}
@@ -330,13 +336,15 @@ services:
     environment:
       - AWS_ACCESS_KEY_ID=${MINIO_ACCESS_KEY}
       - AWS_SECRET_ACCESS_KEY=${MINIO_SECRET_ACCESS_KEY}
-      - MLFLOW_S3_ENDPOINT_URL=http://localhost:9000
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
       - MLFLOW_S3_IGNORE_TLS=true
     command: >
       mlflow server
       --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/mlflow
       --host 0.0.0.0
       --port 5000
+      --serve-artifacts
+      --artifacts-destination s3://mlflow
     depends_on:
       postgres:
         condition: service_started
