@@ -15,22 +15,22 @@ def run_pipeline():
 
     t1 = BashOperator(
         task_id="etl",
-        bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/etl.py --source_path ${AIRFLOW_HOME}/data --destination_path ${AIRFLOW_HOME}/data/cleaned "
+        bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/etl.py --source_path data --destination_path data/cleaned "
     )
 
     t2 = BashOperator(
         task_id="prepare_data",
-        bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/prepare_data.py --source_path  ${AIRFLOW_HOME}/data/cleaned --destination_path  ${AIRFLOW_HOME}/data "
+        bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/prepare_data.py --source_path  data/cleaned --destination_path  data "
     )
 
     t3 = BashOperator(
         task_id="hyperparameters_tuning",
-        bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/hyperparameters_tuning.py --source_path  ${AIRFLOW_HOME}/data --path_data_cleaned   ${AIRFLOW_HOME}/data/cleaned --trials  {{params['trials']}} "
+        bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/hyperparameters_tuning.py --path_for_merged  data --path_data_cleaned   data/cleaned --n_trials  {{params['trials']}} "
     )
 
     t4 = BashOperator(
         task_id="create_submission",
-        bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/create_submission.py --source_path  ${AIRFLOW_HOME}/data --path_data_cleaned   ${AIRFLOW_HOME}/data/cleaned/cleaned "
+        bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/create_submission.py --path_for_merged data --path_data_cleaned   data/cleaned/cleaned "
     )
 
     chain(t1, t2,t3, t4)

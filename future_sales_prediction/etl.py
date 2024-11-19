@@ -5,6 +5,9 @@ import click
 import argparse
 import mlflow
 import os
+import boto3
+from io import StringIO
+from io import BytesIO
 
 def run_etl(source_path, destination_path):
     """
@@ -14,12 +17,52 @@ def run_etl(source_path, destination_path):
         source_path (str): path to the source data folder
         destination_path (str): path to the destination data folder
     """
-    data_train = pd.read_csv(f'{source_path}/sales_train.csv')
-    data_test = pd.read_csv(f'{source_path}/test.csv')
+    #data_train = pd.read_csv(f'{source_path}/sales_train.csv')
+    #data_test = pd.read_csv(f'{source_path}/test.csv')
 
-    item_cat = pd.read_csv(f'{source_path}/item_categories.csv')
-    items = pd.read_csv(f'{source_path}/items.csv')
-    shops = pd.read_csv(f'{source_path}/shops.csv')
+    #item_cat = pd.read_csv(f'{source_path}/item_categories.csv')
+    #items = pd.read_csv(f'{source_path}/items.csv')
+    #shops = pd.read_csv(f'{source_path}/shops.csv')
+    client = boto3.client('s3',
+                      endpoint_url='http://minio:9000',
+                      aws_access_key_id='airflow_user',
+                      aws_secret_access_key='airflow_paswword')
+
+
+    bucket_name = 'mlflow'
+    
+
+    object_key = f'{source_path}/sales_train.csv'
+    csv_obj = client.get_object(Bucket=bucket_name, Key=object_key)
+    body = csv_obj['Body']
+    csv_string = body.read().decode('utf-8')
+    data_train = pd.read_csv(StringIO(csv_string))
+
+    object_key = f'{source_path}/item_categories.csv'
+    csv_obj = client.get_object(Bucket=bucket_name, Key=object_key)
+    body = csv_obj['Body']
+    csv_string = body.read().decode('utf-8')
+    item_cat = pd.read_csv(StringIO(csv_string))
+
+    object_key = f'{source_path}/test.csv'
+    csv_obj = client.get_object(Bucket=bucket_name, Key=object_key)
+    body = csv_obj['Body']
+    csv_string = body.read().decode('utf-8')
+    data_test = pd.read_csv(StringIO(csv_string))
+
+    object_key = f'{source_path}/shops.csv'
+    csv_obj = client.get_object(Bucket=bucket_name, Key=object_key)
+    body = csv_obj['Body']
+    csv_string = body.read().decode('utf-8')
+    shops = pd.read_csv(StringIO(csv_string))
+
+    object_key = f'{source_path}/items.csv'
+    csv_obj = client.get_object(Bucket=bucket_name, Key=object_key)
+    body = csv_obj['Body']
+    csv_string = body.read().decode('utf-8')
+    items = pd.read_csv(StringIO(csv_string))
+
+    
     shops=shops.drop([0,1,10])
     data_train.loc[data_train['shop_id']==0,'shop_id'] = 57
     data_train.loc[data_train['shop_id']==1,'shop_id'] = 58
@@ -39,11 +82,45 @@ def run_etl(source_path, destination_path):
     
     Path(destination_path).mkdir(parents=True, exist_ok=True)
 
-    data_train.to_csv(f'{destination_path}/data_train.csv', mode='w',index=False)
-    shops.to_csv(f'{destination_path}/shops.csv', mode='w',index=False)
-    item_cat.to_csv(f'{destination_path}/item_categories.csv', mode='w',index=False)
-    items.to_csv(f'{destination_path}/items.csv', mode='w',index=False)
-    data_test.to_csv(f'{destination_path}/test.csv', mode='w',index=False)
+    #data_train.to_csv(f'{destination_path}/data_train.csv', mode='w',index=False)
+    #shops.to_csv(f'{destination_path}/shops.csv', mode='w',index=False)
+    #item_cat.to_csv(f'{destination_path}/item_categories.csv', mode='w',index=False)
+    #items.to_csv(f'{destination_path}/items.csv', mode='w',index=False)
+    #data_test.to_csv(f'{destination_path}/test.csv', mode='w',index=False)
+
+    csv_bytes = data_train.to_csv(index=False).encode('utf-8')
+    csv_buffer = BytesIO(csv_bytes)
+    client.put_object(Body=csv_buffer,
+                    Bucket='mlflow',
+                    Key=f'{destination_path}/data_train.csv')
+    
+    csv_bytes = item_cat.to_csv(index=False).encode('utf-8')
+    csv_buffer = BytesIO(csv_bytes)
+    client.put_object(Body=csv_buffer,
+                    Bucket='mlflow',
+                    Key=f'{destination_path}/item_categories.csv')
+    
+    csv_bytes = shops.to_csv(index=False).encode('utf-8')
+    csv_buffer = BytesIO(csv_bytes)
+    client.put_object(Body=csv_buffer,
+                    Bucket='mlflow',
+                    Key=f'{destination_path}/shops.csv')
+    
+    csv_bytes = items.to_csv(index=False).encode('utf-8')
+    csv_buffer = BytesIO(csv_bytes)
+    client.put_object(Body=csv_buffer,
+                    Bucket='mlflow',
+                    Key=f'{destination_path}/items.csv')
+    
+    csv_bytes = data_test.to_csv(index=False).encode('utf-8')
+    csv_buffer = BytesIO(csv_bytes)
+    client.put_object(Body=csv_buffer,
+                    Bucket='mlflow',
+                    Key=f'{destination_path}/test.csv')
+    
+
+
+
 
 def get_or_create_experiment(experiment_name):
     """
@@ -70,6 +147,8 @@ def get_or_create_experiment(experiment_name):
 
 if __name__ == '__main__':
 
+    
+    
     #If omit this line, running wuth docker gives error. If using MLFlow Projects, git is required?
     mlflow.set_tracking_uri(uri="http://mlflow:5000")
     exp = get_or_create_experiment('LGB')
