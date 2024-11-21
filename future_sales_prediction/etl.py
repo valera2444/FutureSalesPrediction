@@ -9,7 +9,7 @@ import boto3
 from io import StringIO
 from io import BytesIO
 
-def run_etl(source_path, destination_path):
+def run_etl(client, source_path, destination_path):
     """
     runs etl and writes cleaned data into data_cleaned/{file_name}.csv
 
@@ -23,11 +23,7 @@ def run_etl(source_path, destination_path):
     #item_cat = pd.read_csv(f'{source_path}/item_categories.csv')
     #items = pd.read_csv(f'{source_path}/items.csv')
     #shops = pd.read_csv(f'{source_path}/shops.csv')
-    client = boto3.client('s3',
-                      endpoint_url='http://minio:9000',
-                      aws_access_key_id='airflow_user',
-                      aws_secret_access_key='airflow_paswword')
-
+    
 
     bucket_name = 'mlflow'
     
@@ -150,14 +146,18 @@ if __name__ == '__main__':
     
     
     #If omit this line, running wuth docker gives error. If using MLFlow Projects, git is required?
-    mlflow.set_tracking_uri(uri="http://mlflow:5000")
-    exp = get_or_create_experiment('LGB')
-    with mlflow.start_run(experiment_id=exp,run_name='etl', nested=True):
-        mlflow.set_tag("Features","item id included")
+    
+    
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source_path', type=str)
-    parser.add_argument('--destination_path', type=str)
+    parser.add_argument('--source_path', type=str, help='folder where source data stored in minio')
+    parser.add_argument('--destination_path', type=str, help='folder where data after etl will be stored')
 
     args = parser.parse_args()
 
-    run_etl(args.source_path, args.destination_path)
+    client = boto3.client('s3',
+                      endpoint_url='http://minio:9000',
+                      aws_access_key_id='airflow_user',
+                      aws_secret_access_key='airflow_paswword')
+
+
+    run_etl(client, args.source_path, args.destination_path)

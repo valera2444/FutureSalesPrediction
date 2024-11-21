@@ -20,6 +20,7 @@ from functools import partial
 import logging
 import optuna
 
+import mlflow
 
 import time
 
@@ -29,7 +30,8 @@ import pickle
 
 import argparse
 
-#np.random.seed(42)
+import os
+import boto3
 
 SOURCE_PATH = None
 def prepare_past_ID_s(data_train):
@@ -698,7 +700,7 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
 
     return val_preds, val_rmse
 
-def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training,source_path):
+def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training,source_path,experiment_id):
     """
     Runs model training and validation across multiple months and computes RMSE for each month.
     Note: batch learning works properly only for LGBMRegressor. Using another model with batch_size<=len(shop_item_pairs_WITH_PREV_in_dbn[dbn]) will lead to incorrect results
@@ -710,6 +712,7 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
         shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int,int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
         batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
+        experiment_id (str): mlflow experiment id
     Returns:
         tuple: 
             - val_errors (list[np.array[float]]): List of RMSE values for each month.
@@ -722,49 +725,55 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
     
     
     for val_month in val_monthes:
+        
         run_name=f'validation on {val_month}'
+        with mlflow.start_run(experiment_id=experiment_id, run_name=run_name,nested=True):
 
-        model = LGBMRegressor(verbose=-1,n_jobs=multiprocessing.cpu_count(), num_leaves=params['num_leaves'],
-                               n_estimators = params['n_estimators'],
-                                learning_rate=params['lr'])
-        
-        
-        print(f'month {val_month} started')
-        t1 = time.time()
-        
-        print('month', val_month%12)
-        model,columns_order = train_model(
-            model, 
-            batch_size, 
-            val_month,
-            shop_item_pairs_WITH_PREV_in_dbn,
-            batch_size_to_read,
-            batches_for_training,
-            shop_item_pairs_in_dbn = None,
-            source_path=source_path
-        )
+            model = LGBMRegressor(verbose=-1,n_jobs=multiprocessing.cpu_count(), num_leaves=params['num_leaves'],
+                                n_estimators = params['n_estimators'],
+                                    learning_rate=params['lr'])
+            
+            
+            print(f'month {val_month} started')
+            t1 = time.time()
+            
+            print('month', val_month%12)
+            model,columns_order = train_model(
+                model, 
+                batch_size, 
+                val_month,
+                shop_item_pairs_WITH_PREV_in_dbn,
+                batch_size_to_read,
+                batches_for_training,
+                shop_item_pairs_in_dbn = None,
+                source_path=source_path
+            )
 
-        t2=time.time()
-        print(f'model training on {val_month} time,',t2-t1)
-        print('feature importances, ')
-        print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
-        
-        t1 = time.time()
+            t2=time.time()
+            print(f'model training on {val_month} time,',t2-t1)
+            print('feature importances, ')
+            print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
+            
+            t1 = time.time()
 
-        val_pred, val_error = validate_model(
-            model,
-            batch_size,
-            val_month,
-            columns_order,
-            shop_item_pairs_in_dbn,
-            batch_size_to_read,
-            source_path
-        )
+            val_pred, val_error = validate_model(
+                model,
+                batch_size,
+                val_month,
+                columns_order,
+                shop_item_pairs_in_dbn,
+                batch_size_to_read,
+                source_path
+            )
 
-        t2 = time.time()
-        print(f'validation time on month {val_month},',t2-t1)
-        val_errors.append(val_error)
-        val_preds.append(val_pred)
+            t2 = time.time()
+            print(f'validation time on month {val_month},',t2-t1)
+            val_errors.append(val_error)
+            val_preds.append(val_pred)
+
+            mlflow.log_metric('rmse',val_error )
+            mlflow.log_params(params)
+
             
             
             
@@ -774,55 +783,58 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
     
 
 
-def objective(trial,val_monthes,shop_item_pairs_in_dbn,shop_item_pairs_WITH_PREV_in_dbn,source_path):
-    val_monthes_str = [str(i) for i in val_monthes]
-    lr = trial.suggest_float('lr', low=0.002, high = 0.07,log=True)
-    num_leaves = trial.suggest_int('num_leaves', low=32, high = 256,step=50)
-    n_estimators=trial.suggest_int('n_estimators', low=100, high = 700,step=100)
+def objective(trial,val_monthes,shop_item_pairs_in_dbn,shop_item_pairs_WITH_PREV_in_dbn,source_path,experiment_id):
+    with mlflow.start_run(experiment_id=experiment_id, run_name='run 23,30,33',nested=True):
+        val_monthes_str = [str(i) for i in val_monthes]
+        lr = trial.suggest_float('lr', low=0.002, high = 0.07,log=True)
+        num_leaves = trial.suggest_int('num_leaves', low=32, high = 256,step=50)
+        n_estimators=trial.suggest_int('n_estimators', low=100, high = 100,step=100)
 
-    #parametrs which doesnt affect training
-    batch_size_to_read=200_000 # the more batches_for_training - the less should be batch_size_to_read to prevent memory error
+        #parametrs which doesnt affect training
+        batch_size_to_read=50_000 # the more batches_for_training - the less should be batch_size_to_read to prevent memory error
 
-    #parametrs which affect number of estimators:
-    batches_for_training=1#each batch increases number of estimators with n_estimators
-    batch_size=3_000_000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
+        #parametrs which affect number of estimators:
+        batches_for_training=1#each batch increases number of estimators with n_estimators
+        batch_size=100_000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
 
 
-    print('validation started...')
-    params = defaultdict()
-    params['trial'] = trial
-    params['lr'] = lr
-    params['num_leaves'] = num_leaves
-    params['n_estimators'] = n_estimators
-    params['batch_size']=batch_size
-    params['batches_for_training']=batches_for_training
-    params['batch_size_to_read']=batch_size_to_read
-    val_errors, val_preds = validate_ML(
-                                        params,
-                                        batch_size=batch_size,
-                                        val_monthes=val_monthes, 
-                                        shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
-                                        shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
-                                        batch_size_to_read=batch_size_to_read,
-                                        batches_for_training=batches_for_training,
-                                        source_path=source_path
-                                        )
+        print('validation started...')
+        params = defaultdict()
+        params['trial'] = trial
+        params['lr'] = lr
+        params['num_leaves'] = num_leaves
+        params['n_estimators'] = n_estimators
+        params['batch_size']=batch_size
+        params['batches_for_training']=batches_for_training
+        params['batch_size_to_read']=batch_size_to_read
+        val_errors, val_preds = validate_ML(
+                                            params,
+                                            batch_size=batch_size,
+                                            val_monthes=val_monthes, 
+                                            shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
+                                            shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
+                                            batch_size_to_read=batch_size_to_read,
+                                            batches_for_training=batches_for_training,
+                                            source_path=source_path,
+                                            experiment_id=experiment_id
+                                            )
 
-    print('lr:'+str(lr) + ' ' + str(val_errors) + '\n')
-    
-    return np.mean(val_errors)
+        print('lr:'+str(lr) + ' ' + str(val_errors) + '\n')
 
-def run_optimizing(path_for_merged, path_data_cleaned, n_trials):
+        mlflow.log_params(params)
+        mlflow.log_metric('rmse', np.mean(val_errors))
+        return np.mean(val_errors)
+
+def run_optimizing(path_for_merged, path_data_cleaned, n_trials, experiment_id):
     """
-    Function for hyperparameters tuning 
+    Function for hyperparameters tuning. Writes best parametrs to ./saved_dictionary.pkl
 
     Args:
         path_for_merged (str): path to the file created by prepare_data.py
         path_data_cleaned (str): path to the directory with data creaed by etl.py
         n_trials (int): number of iterations to run optuna
+        experiment_id (str): experiment id for mlflow
     """
-    
-   
     data_train = pd.read_csv(f'{path_data_cleaned}/data_train.csv')
     test = pd.read_csv(f'{path_data_cleaned}/test.csv')
     test['date_block_num'] = 34
@@ -839,25 +851,97 @@ def run_optimizing(path_for_merged, path_data_cleaned, n_trials):
                          val_monthes = val_monthes,
                          shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
                          shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
-                         source_path=path_for_merged)
+                         source_path=path_for_merged,
+                         experiment_id=experiment_id)
 
     study = optuna.create_study(direction="minimize")
 
     study.optimize(objective_f, n_trials=n_trials)
 
-    with open('saved_dictionary.pkl', 'wb') as f:
+    with open('best_parameters.pkl', 'wb') as f:
         pickle.dump(study.best_params, f)
 
     return study.best_params
 
 
+def download_s3_folder(s3c, bucket_name, s3_folder, local_dir=None):
+    """
+    Download the contents of a folder directory to local_dir (creates if not exist)
+    Args:
+        bucket_name: the name of the s3 bucket
+        s3_folder: the folder path in the s3 bucket
+        local_dir: a relative or absolute directory path in the local file system
+    """
+    bucket = s3c.Bucket(bucket_name)
+    for obj in bucket.objects.filter(Prefix=s3_folder):
+        target = obj.key if local_dir is None \
+            else os.path.join(local_dir, os.path.relpath(obj.key, s3_folder))
+        if not os.path.exists(os.path.dirname(target)):
+            os.makedirs(os.path.dirname(target))
+        if obj.key[-1] == '/':
+            continue
+        bucket.download_file(obj.key, target)
+        #print(obj.key, target)
+
+
+def get_or_create_experiment(experiment_name):
+    """
+    Retrieve the ID of an existing MLflow experiment or create a new one if it doesn't exist.
+
+    This function checks if an experiment with the given name exists within MLflow.
+    If it does, the function returns its ID. If not, it creates a new experiment
+    with the provided name and returns its ID.
+
+    Parameters:
+    - experiment_name (str): Name of the MLflow experiment.
+
+    Returns:
+    - str: ID of the existing or newly created MLflow experiment.
+    """
+
+    if experiment := mlflow.get_experiment_by_name(experiment_name):
+        return experiment.experiment_id
+    else:
+        return mlflow.create_experiment(experiment_name)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path_for_merged', type=str)
-    parser.add_argument('--path_data_cleaned', type=str)
-    parser.add_argument('--n_trials', type=int)
+    parser.add_argument('--path_for_merged', type=str, help='folder where merged.csv stored after prepare_data.py. Also best hyperparams will be stored here')
+    parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
+    parser.add_argument('--n_trials', type=int, help='Number of iteration for TPE estimator')
 
     args = parser.parse_args()
 
-    run_optimizing(args.path_for_merged, args.path_data_cleaned, args.n_trials)
+
+    ACCESS_KEY = 'airflow_user'
+    SECRET_KEY = 'airflow_paswword'
+    host = 'http://minio:9000'
+    bucket_name = 'mlflow'
+
+    s3c = boto3.resource('s3', 
+                    aws_access_key_id=ACCESS_KEY,
+                    aws_secret_access_key=SECRET_KEY,
+                    endpoint_url=host) 
+    
+    download_s3_folder(s3c,bucket_name,args.path_data_cleaned, args.path_data_cleaned)
+    
+
+    s3c = boto3.client('s3', 
+                    aws_access_key_id=ACCESS_KEY,
+                    aws_secret_access_key=SECRET_KEY,
+                    endpoint_url=host)
+    
+    s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') # ASSUMES THAT path args.path_for_merged exists
+
+    mlflow.set_tracking_uri(uri="http://mlflow:5000")
+    exp = get_or_create_experiment('hyperparameter_optimiztion')
+
+    with mlflow.start_run(experiment_id=exp, run_name='run 23,30,33'):
+        
+        bp =run_optimizing(args.path_for_merged, args.path_data_cleaned, args.n_trials,exp)
+
+    s3c.upload_file('best_parameters.pkl', bucket_name, f'{args.path_for_merged}/best_parameters.pkl')
+
+
+    s3c.close()
