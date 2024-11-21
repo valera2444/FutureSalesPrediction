@@ -974,7 +974,7 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
     if not create_submission:
 
         
-        val_monthes=range(22,34)
+        val_monthes=range(22,24)
 
         print('validation started...')
         
@@ -1033,6 +1033,7 @@ if __name__ == '__main__':
 
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--run_name', type=str)
     parser.add_argument('--path_for_merged', type=str,help='folder where merged.csv stored after prepare_data.py. Also best hyperparameters  stored in this folder')
     parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
     parser.add_argument('--is_create_submission', type=int, help='0 if false else 1')
@@ -1042,7 +1043,7 @@ if __name__ == '__main__':
 
     ACCESS_KEY = 'airflow_user'
     SECRET_KEY = 'airflow_paswword'
-    host = 'http://minio:9000'
+    host = 'http://localhost:9000'
     bucket_name = 'mlflow'
 
     s3c = boto3.resource('s3', 
@@ -1060,19 +1061,19 @@ if __name__ == '__main__':
     
     s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') # ASSUMES THAT path args.path_for_merged exists
 
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/best_parameters.pkl', 'best_parameters.pkl')
+    s3c.download_file(bucket_name, f'{args.run_name}/best_parameters.pkl', 'best_parameters.pkl')
     
-    mlflow.set_tracking_uri(uri="http://mlflow:5000")
+    mlflow.set_tracking_uri(uri="http://localhost:5000")
 
     exp = get_or_create_experiment('create_submission')
 
     with mlflow.start_run(experiment_id=exp, run_name='submission creation'):
         model=run_create_submission(args.path_for_merged, args.path_data_cleaned, args.is_create_submission)
 
-        mlflow.lightgbm.log_model(model, artifact_path='LGBM_model_1')
+        mlflow.lightgbm.log_model(model, artifact_path=f'{args.run_name}/LGBM_model_1')
 
     if args.is_create_submission:
-        s3c.upload_file('submission.csv', bucket_name, 'submission.csv')
+        s3c.upload_file('submission.csv', bucket_name, f'{args.run_name}/submission.csv')
     else:
         
         s3c.upload_file(f'{args.path_for_merged}/val_preds.npy', bucket_name, f'{args.path_for_merged}/val_preds.npy')

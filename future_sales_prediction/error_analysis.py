@@ -42,6 +42,7 @@ def download_s3_folder(s3c, bucket_name, s3_folder, local_dir=None):
 
 def read_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--run_name', type=str)
     parser.add_argument('--path_for_merged', type=str, help='folder where error arrays stored (same as folder where merged.csv stored)')
     parser.add_argument('--path_data_cleaned', type=str)
     parser.add_argument('--path_artifact_storage', type=str, help='folder name in s3 storage where artifacts will be stored')
@@ -56,7 +57,7 @@ def download_files(args):
 
     ACCESS_KEY = 'airflow_user'
     SECRET_KEY = 'airflow_paswword'
-    host = 'http://minio:9000'
+    host = 'http://localhost:9000'
     bucket_name = 'mlflow'
 
     s3c = boto3.resource('s3', 
@@ -131,9 +132,9 @@ def prepare_df(args):
     merged = pd.read_csv(SOURCE_PATH, usecols=cols)
         
     dbn_diff = pd.read_csv(f'{args.path_for_merged}/item_dbn_diff.csv')
-    dbn_diff_selected = dbn_diff[['shop_id','item_id',*[str(i) for i in range(22,35)]]]
+    dbn_diff_selected = dbn_diff[['shop_id','item_id',*[str(i) for i in range(22,24)]]]
     df_diff = pd.DataFrame({'shop_id':[], 'item_id':[],'date_block_num':[],'dbn_diff':[]})
-    for month in range(22,35):
+    for month in range(22,24):
         shop_id = dbn_diff_selected.shop_id
         item_id = dbn_diff_selected.item_id
         dbn = month
@@ -175,7 +176,7 @@ def prepare_df(args):
 
 ACCESS_KEY = 'airflow_user'
 SECRET_KEY = 'airflow_paswword'
-host = 'http://minio:9000'
+host = 'http://localhost:9000'
 bucket_name = 'mlflow'
 
 
@@ -193,15 +194,15 @@ df = prepare_df(args)
 
 total_sails=df.groupby('date_block_num').agg({'sales':'mean','preds':'mean'})
 
-plt.plot(np.arange(22,34,dtype=int),total_sails['sales'], label='Total sales target' )
-plt.plot(np.arange(22,34,dtype=int),total_sails['preds'], label='Total sales predictions' )
+plt.plot(np.arange(22,24,dtype=int),total_sails['sales'], label='Total sales target' )
+plt.plot(np.arange(22,24,dtype=int),total_sails['preds'], label='Total sales predictions' )
 plt.legend()
 
 plt.xlabel('Sales')
 plt.xlabel('date block num')
 
 plt.savefig('sales_preds_per_dbn.png')
-s3c.upload_file('sales_preds_per_dbn.png', bucket_name, f'{args.path_artifact_storage}/sales_preds_per_dbn.png')
+s3c.upload_file('sales_preds_per_dbn.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/sales_preds_per_dbn.png')
 
 
 
@@ -224,7 +225,7 @@ ax[2].tick_params(axis='x', labelrotation=90,labelsize=7)
 ax[2].set_title('SMAPE error for dbn_diff');
 
 fig.savefig('mean_sales_errors_per_dbn_diff.png')
-s3c.upload_file('mean_sales_errors_per_dbn_diff.png', bucket_name, f'{args.path_artifact_storage}/mean_sales_errors_per_dbn_diff.png')
+s3c.upload_file('mean_sales_errors_per_dbn_diff.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_dbn_diff.png')
 
 
 
@@ -245,7 +246,7 @@ ax[2].tick_params(axis='x', labelrotation=90)
 ax[2].set_title('SMAPE error for date_block_num');
 
 fig.savefig('mean_sales_errors_per_date_block_num.png')
-s3c.upload_file('mean_sales_errors_per_date_block_num.png', bucket_name, f'{args.path_artifact_storage}/mean_sales_errors_per_date_block_num.png')
+s3c.upload_file('mean_sales_errors_per_date_block_num.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_date_block_num.png')
 
 
 
@@ -267,7 +268,7 @@ ax[2].tick_params(axis='x', labelrotation=90)
 ax[2].set_title('SMAPE error for super_category');
 
 fig.savefig('mean_sales_errors_per_super_category.png')
-s3c.upload_file('mean_sales_errors_per_super_category.png', bucket_name, f'{args.path_artifact_storage}/mean_sales_errors_per_super_category.png')
+s3c.upload_file('mean_sales_errors_per_super_category.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_super_category.png')
 
 
 
@@ -285,7 +286,7 @@ ax[2].tick_params(axis='x', labelrotation=90)
 ax[2].set_title('SMAPE error for city');
 
 fig.savefig('mean_sales_errors_per_city.png')
-s3c.upload_file('mean_sales_errors_per_city.png', bucket_name, f'{args.path_artifact_storage}/mean_sales_errors_per_city.png')
+s3c.upload_file('mean_sales_errors_per_city.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_city.png')
 
 
 
@@ -306,7 +307,7 @@ ax[1].set_title('MAE error for different sales')
 ax[2].tick_params(axis='x', labelrotation=90)
 ax[2].set_title('SMAPE error for different sales');
 fig.savefig('hist_n_errors_per_dbn_diff.png')
-s3c.upload_file('hist_n_errors_per_dbn_diff.png', bucket_name, f'{args.path_artifact_storage}/hist_n_errors_per_dbn_diff.png')
+s3c.upload_file('hist_n_errors_per_dbn_diff.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/hist_n_errors_per_dbn_diff.png')
 #SMAPE is undefined in 0
 
 
@@ -319,7 +320,7 @@ plt.xlabel('count')
 plt.ylabel('sales')
 plt.title('Histogram of sales with error > 5')
 plt.savefig('histogram_of sales_with_error > 5.png')
-s3c.upload_file('histogram_of sales_with_error > 5.png', bucket_name, f'{args.path_artifact_storage}/histogram_of sales_with_error > 5.png')
+s3c.upload_file('histogram_of sales_with_error > 5.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/histogram_of sales_with_error > 5.png')
 
 
 
@@ -330,7 +331,7 @@ plt.xlabel('count')
 plt.ylabel('sales')
 plt.title('Histogram of sales with error < -5')
 plt.savefig('histogram_of_sales_with_error < -5.png')
-s3c.upload_file('histogram_of_sales_with_error < -5.png', bucket_name, f'{args.path_artifact_storage}/histogram_of_sales_with_error < -5.png')
+s3c.upload_file('histogram_of_sales_with_error < -5.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/histogram_of_sales_with_error < -5.png')
 
 
 
@@ -340,7 +341,7 @@ plt.violinplot(df_large_errors['diff']);
 plt.ylabel('diff')
 plt.title('violinplot of sales with MAE > 10')
 plt.savefig('violinplot of sales with MAE > 10.png')
-s3c.upload_file('histogram_of_sales_with_error < -5.png', bucket_name, f'{args.path_artifact_storage}/histogram_of_sales_with_error < -5.png')
+s3c.upload_file('histogram_of_sales_with_error < -5.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/histogram_of_sales_with_error < -5.png')
 
 
 
@@ -353,7 +354,7 @@ ax[1].hist(df_large_errors.dbn_diff, bins=400);
 ax[1].set_xlabel('Monthes since first sale')
 ax[1].set_title('Distribution of date block num difference in data with MAE > 19')
 plt.savefig('distributions_of_dbns.png')
-s3c.upload_file('distributions_of_dbns.png', bucket_name, f'{args.path_artifact_storage}/distributions_of_dbns.png')
+s3c.upload_file('distributions_of_dbns.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/distributions_of_dbns.png')
 
 
 
@@ -382,4 +383,4 @@ sns.lineplot(df_selected_shop4[['date_block_num','preds']], x='date_block_num',y
 ax[1,1].set_title("РостовНаДону ТЦ \"Мега\"")
 
 fig.savefig('large_errors_far_after_entering_market')
-s3c.upload_file('large_errors_far_after_entering_market.png', bucket_name, f'{args.path_artifact_storage}/large_errors_far_after_entering_market.png')
+s3c.upload_file('large_errors_far_after_entering_market.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/large_errors_far_after_entering_market.png')

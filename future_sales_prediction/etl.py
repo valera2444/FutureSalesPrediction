@@ -149,13 +149,14 @@ if __name__ == '__main__':
     
     
     parser = argparse.ArgumentParser()
+    parser.add_argument('--run_name', type=str)
     parser.add_argument('--source_path', type=str, help='folder where source data stored in minio')
     parser.add_argument('--destination_path', type=str, help='folder where data after etl will be stored')
 
     args = parser.parse_args()
 
     client = boto3.client('s3',
-                      endpoint_url='http://minio:9000',
+                      endpoint_url='http://localhost:9000',
                       aws_access_key_id='airflow_user',
                       aws_secret_access_key='airflow_paswword')
 

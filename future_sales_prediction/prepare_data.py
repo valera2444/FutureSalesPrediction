@@ -631,13 +631,14 @@ def download_s3_folder(s3c, bucket_name, s3_folder, local_dir=None):
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--run_name', type=str)
     parser.add_argument('--source_path', type=str, help='folder where data stored after etl.py')
     parser.add_argument('--destination_path', type=str, help='path where merged.csv will be stored')
     args = parser.parse_args()
     
     ACCESS_KEY = 'airflow_user'
     SECRET_KEY = 'airflow_paswword'
-    host = 'http://minio:9000'
+    host = 'http://localhost:9000'
     bucket_name = 'mlflow'
 
     s3c = boto3.resource('s3', 

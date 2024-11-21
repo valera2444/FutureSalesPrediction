@@ -854,6 +854,7 @@ if __name__ == '__main__':
 
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--run_name', type=str)
     parser.add_argument('--path_for_merged', type=str,help='folder where merged.csv stored after prepare_data.py. Also best hyperparameters  stored in this folder')
     parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
     parser.add_argument('--path_artifact_storage', type=str, help='folder where shap images will be stored')
@@ -864,7 +865,7 @@ if __name__ == '__main__':
 
     ACCESS_KEY = 'airflow_user'
     SECRET_KEY = 'airflow_paswword'
-    host = 'http://minio:9000'
+    host = 'http://localhost:9000'
     bucket_name = 'mlflow'
 
     s3c = boto3.resource('s3', 
@@ -882,9 +883,9 @@ if __name__ == '__main__':
     
     s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') # ASSUMES THAT path args.path_for_merged exists
 
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/best_parameters.pkl', 'best_parameters.pkl')
+    s3c.download_file(bucket_name, f'{args.run_name}/best_parameters.pkl', 'best_parameters.pkl')
     
-    mlflow.set_tracking_uri(uri="http://mlflow:5000")
+    mlflow.set_tracking_uri(uri="http://localhost:5000")
 
     exp = get_or_create_experiment('create_submission')
 
@@ -893,16 +894,16 @@ if __name__ == '__main__':
     shap.plots.beeswarm(shaps, max_display=20,show=False)
     plt.title('SHAPs * 100')
     plt.savefig('shaps_beeswarm.png')
-    s3c.upload_file('shaps_beeswarm.png', bucket_name, f'{args.path_artifact_storage}/shaps_beeswarm.png')
+    s3c.upload_file('shaps_beeswarm.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_beeswarm.png')
 
     shap.plots.bar(shaps * 100, max_display=20,show=False)
     plt.savefig('shaps_bar.png')
-    s3c.upload_file('shaps_bar.png', bucket_name, f'{args.path_artifact_storage}/shaps_bar.png')
+    s3c.upload_file('shaps_bar.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_bar.png')
 
 
     shap.initjs()
     shap.force_plot(explainer.expected_value, shaps.values[10000, :], X_display.iloc[10000, :],show=False)
     plt.savefig('shaps_force_plot.png')
-    s3c.upload_file('shaps_force_plot.png', bucket_name, f'{args.path_artifact_storage}/shaps_force_plot.png')
+    s3c.upload_file('shaps_force_plot.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_force_plot.png')
 
     s3c.close()
