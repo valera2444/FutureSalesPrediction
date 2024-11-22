@@ -432,7 +432,7 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
         yield [l_x, l_y]#, test
 
 
-def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
+def create_batch_val(dbn, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
     """
     Creates validation batches for date_block_num.
 
@@ -453,6 +453,8 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
     items = np.unique(list(zip(*val))[1])
 
     cartesian_product = np.random.permutation (np.array(np.meshgrid(shops, items)).T.reshape(-1, 2))
+
+    batch_size= len(cartesian_product)+1
     
     chunk_num =  len(cartesian_product)// batch_size if len(cartesian_product)%batch_size==0  else   len(cartesian_product) // batch_size + 1#MAY BE NEED TO CORRECT
 
@@ -510,7 +512,8 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
         batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
         shop_item_pairs_in_dbn (pd.DataFrame, optional): dataframe of cartesian products of (shop, item) for date_block_nums. If None, validation is not performed after every batch
-
+        source_path (str): root path for data
+        
     Returns:
         tuple: 
             - model (object): Trained model.
@@ -594,7 +597,7 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
         print(f'train on batch {c} time,',t2_batch-t1_batch)
         
         if shop_item_pairs_in_dbn is not None:
-            val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path)
+            val_pred, val_error = validate_model(model, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path)
             print(f'val score after batch {c}', val_error)
 
         c+=1
@@ -608,22 +611,22 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
 
     return model, columns_order
 
-def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
+def validate_model(model,val_month, columns_order, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
     """
     Validates the model and calculates RMSE on the validation set on the current val_month.
 
     Args:
         model (object): Machine learning model to be validated.
-        batch_size (int): Number of samples per batch.
         val_month (int): Month used for validation.
         columns_order (list[str]): Order of feature columns.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
-
+        source_path (str): root path for data
     Returns:
         tuple: 
-            - val_preds (np.array[float]): Predictions for validation set.
-            - val_rmse (float): RMSE for validation set.
+            - val_preds (list):
+            - val_rmse (float):
+            - Y_true_l_shop_item (list): list of shops, items, target lists
     """
     rmse = 0
     c=0
@@ -633,7 +636,7 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
     preds_l = []
     Y_true_l_shop_item=[]
     
-    for X_val, Y_val in create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn, batch_size_to_read,source_path):#but then cartesian product used
+    for X_val, Y_val in create_batch_val(val_month, shop_item_pairs_in_dbn, batch_size_to_read,source_path):#but then cartesian product used
         shop_id = X_val.shop_id
         item_id = X_val.item_id
         if X_val is None:
@@ -697,18 +700,20 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
 
     return val_preds, val_rmse,Y_true_l_shop_item
 
-def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training, source_path):
+def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training, source_path,experiment_id):
     """
     Runs model training and validation across multiple months and computes RMSE for each month.
     Note: batch learning works properly only for LGBMRegressor. Using another model with batch_size<=len(shop_item_pairs_WITH_PREV_in_dbn[dbn]) will lead to incorrect results
     Args:
         params (dict): params for machine learning model.
-        batch_size (int): Number of samples per batch.
+        batch_size (int): Number of samples per batch for training.
         val_monthes (list): List of months for validation.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
         shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int,int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
         batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
+        source_path (str): root path for data
+        experiment_id (str): mlflow experiment id
     Returns:
         tuple: 
             - val_errors (list[np.array[float]]): List of RMSE values for each month.
@@ -723,59 +728,62 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
     for val_month in val_monthes:
 
         run_name=f'validation on {val_month}'
+        with mlflow.start_run(experiment_id=experiment_id, run_name=run_name,nested=True):
+            model = LGBMRegressor(
+                num_leaves=params['num_leaves'],
+                n_estimators=params['n_estimators'],
+                learning_rate=params['learning_rate'],
+                verbose=-1,
+                n_jobs=multiprocessing.cpu_count()
+            )
+            print(f'month {val_month} started')
+            t1 = time.time()
+            
+            print('month', val_month%12)
 
-        model = LGBMRegressor(
-            num_leaves=params['num_leaves'],
-            n_estimators=params['n_estimators'],
-            learning_rate=params['learning_rate'],
-            verbose=-1,
-            n_jobs=multiprocessing.cpu_count()
-        )
-        print(f'month {val_month} started')
-        t1 = time.time()
-        
-        print('month', val_month%12)
 
+            model,columns_order = train_model(
+                model, 
+                batch_size, 
+                val_month,
+                shop_item_pairs_WITH_PREV_in_dbn,
+                batch_size_to_read,
+                batches_for_training,
+                shop_item_pairs_in_dbn = None,
+                source_path=source_path
+            )
 
-        model,columns_order = train_model(
-            model, 
-            batch_size, 
-            val_month,
-            shop_item_pairs_WITH_PREV_in_dbn,
-            batch_size_to_read,
-            batches_for_training,
-            shop_item_pairs_in_dbn = None,
-            source_path=source_path
-        )
+            t2=time.time()
+            print(f'model training on {val_month} time,',t2-t1)
+            print('feature importances, ')
+            print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
+            
+            t1 = time.time()
 
-        t2=time.time()
-        print(f'model training on {val_month} time,',t2-t1)
-        print('feature importances, ')
-        print(list(model.feature_names_in_[np.argsort( model.feature_importances_)][::-1]))
-        
-        t1 = time.time()
+            val_pred, val_error, y_shop_item_val = validate_model(
+                model,
+                val_month,
+                columns_order,
+                shop_item_pairs_in_dbn,
+                batch_size_to_read,
+                source_path=source_path
+            )
 
-        val_pred, val_error, y_shop_item_val = validate_model(
-            model,
-            batch_size,
-            val_month,
-            columns_order,
-            shop_item_pairs_in_dbn,
-            batch_size_to_read,
-            source_path=source_path
-        )
+            t2 = time.time()
+            print(f'validation time on month {val_month},',t2-t1)
 
-        t2 = time.time()
-        print(f'validation time on month {val_month},',t2-t1)
+            val_errors.append(val_error)
+            val_preds.append(val_pred)
+            val_true.append(y_shop_item_val)
 
-        val_errors.append(val_error)
-        val_preds.append(val_pred)
-        val_true.append(y_shop_item_val)
-        
+            mlflow.log_params(params)
+            mlflow.log_metric('rmse', val_error)
+
+            
 
     return val_errors, val_preds, val_true
 
-def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path):
+def create_submission(model, columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path):
     """
     Generates predictions for the test dataset and prepares a submission file.
     
@@ -786,7 +794,8 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
         columns_order (list): Ordered list of feature columns.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
-
+        source_path (str): root path for data
+        cleaned_path (str): path to folder where data saved after etl
     Returns:
         pd.DataFrame: Submission-ready DataFrame containing predictions.
     """
@@ -796,7 +805,7 @@ def create_submission(model,batch_size, columns_order, shop_item_pairs_in_dbn,ba
     data_test = test
     PREDICTION = pd.DataFrame(columns=['shop_id','item_id','item_cnt_month'])
     Y_true_l=[]
-    for X_val, Y_val in create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn,batch_size_to_read,source_path):
+    for X_val, Y_val in create_batch_val(val_month, shop_item_pairs_in_dbn,batch_size_to_read,source_path):
         shop_id = X_val.shop_id
         item_id = X_val.item_id
         if type(model) in [sklearn.linear_model._coordinate_descent.Lasso,
@@ -859,7 +868,8 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
         shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int,int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
         batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
-
+        source_path (str): root path for data
+        cleaned_path (str): path to folder where data saved after etl
     Returns:
         pd.DataFrame: Submission-ready DataFrame containing predictions.
     """
@@ -878,7 +888,7 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
     #print('n_estimators:', model.n_estimators_)
     #print('submission creation started')
     t1 = time.time()
-    data_test = create_submission(model,batch_size,columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path)
+    data_test = create_submission(model,columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path)
     t2 = time.time()
     print('submission creation time,', t2-t1)
 
@@ -889,6 +899,7 @@ def download_s3_folder(s3c, bucket_name, s3_folder, local_dir=None):
     """
     Download the contents of a folder directory to local_dir (creates if not exist)
     Args:
+        s3c: authorized s3 resource
         bucket_name: the name of the s3 bucket
         s3_folder: the folder path in the s3 bucket
         local_dir: a relative or absolute directory path in the local file system
@@ -925,17 +936,17 @@ def get_or_create_experiment(experiment_name):
     else:
         return mlflow.create_experiment(experiment_name)
     
-def run_create_submission(path_for_merged, path_data_cleaned, is_create_submission):
+def run_create_submission(path_for_merged, path_data_cleaned, is_create_submission,experiment_id,batch_size_for_train):
     """
     Function for expanding window validation or creating submission. Reads hyperparameters from saved_dictionary.pkl and writes submission in the root
-
+    If used for expanding window validation, writes predictions and target for further error analysis
     Args:
-        s3c (object): client connection to minio
         path_for_merged (str): path to the folder where created by prepare_data.py file stored
         path_data_cleaned (str): path to the folder where created by etl.py file stored
         is_create_submission (bool): whether to infer model with sliding winfow validation or create submission
-
-    Returns: fitted model
+        batch_size_for_train(int): 
+    Returns:
+        - object: fitted model (if create submission)
     """
 
     
@@ -958,7 +969,7 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
 
     batches_for_training=1
 
-    batch_size=100_000 
+    batch_size=batch_size_for_train
     
 
     with open(f'best_parameters.pkl', 'rb') as f:
@@ -974,7 +985,7 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
     if not create_submission:
 
         
-        val_monthes=range(22,24)
+        val_monthes=range(22,25)
 
         print('validation started...')
         
@@ -996,9 +1007,10 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
                                             shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
                                             batch_size_to_read=batch_size_to_read,
                                             batches_for_training=batches_for_training,
-                                            source_path=path_for_merged
+                                            source_path=path_for_merged,
+                                            experiment_id=experiment_id
         )
-        print(val_errors)
+        
         np.save(f'{path_for_merged}/val_errors.npy', np.array(val_errors,dtype=object))
         np.save(f'{path_for_merged}/val_preds.npy', np.array(val_preds,dtype=object))
         np.save(f'{path_for_merged}/val_true.npy', np.array(val_true,dtype=object))
@@ -1037,13 +1049,14 @@ if __name__ == '__main__':
     parser.add_argument('--path_for_merged', type=str,help='folder where merged.csv stored after prepare_data.py. Also best hyperparameters  stored in this folder')
     parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
     parser.add_argument('--is_create_submission', type=int, help='0 if false else 1')
+    parser.add_argument('--batch_size_for_train', type=int, help='batch size for model training')
 
     args = parser.parse_args()
 
 
     ACCESS_KEY = 'airflow_user'
     SECRET_KEY = 'airflow_paswword'
-    host = 'http://localhost:9000'
+    host = 'http://minio:9000'
     bucket_name = 'mlflow'
 
     s3c = boto3.resource('s3', 
@@ -1063,12 +1076,12 @@ if __name__ == '__main__':
 
     s3c.download_file(bucket_name, f'{args.run_name}/best_parameters.pkl', 'best_parameters.pkl')
     
-    mlflow.set_tracking_uri(uri="http://localhost:5000")
+    mlflow.set_tracking_uri(uri="http://mlflow:5000")
 
     exp = get_or_create_experiment('create_submission')
 
-    with mlflow.start_run(experiment_id=exp, run_name='submission creation'):
-        model=run_create_submission(args.path_for_merged, args.path_data_cleaned, args.is_create_submission)
+    with mlflow.start_run(experiment_id=exp, run_name=args.run_name):
+        model=run_create_submission(args.path_for_merged, args.path_data_cleaned, args.is_create_submission,experiment_id=exp,batch_size_for_train=args.batch_size_for_train)
 
         mlflow.lightgbm.log_model(model, artifact_path=f'{args.run_name}/LGBM_model_1')
 

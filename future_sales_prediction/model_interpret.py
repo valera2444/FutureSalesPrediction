@@ -433,7 +433,7 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
         yield [l_x, l_y]#, test
 
 
-def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
+def create_batch_val( dbn, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
     """
     Creates validation batches for date_block_num.
 
@@ -454,6 +454,7 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
     items = np.unique(list(zip(*val))[1])
 
     cartesian_product = np.random.permutation (np.array(np.meshgrid(shops, items)).T.reshape(-1, 2))
+    batch_size = len(cartesian_product)+1
     
     chunk_num =  len(cartesian_product)// batch_size if len(cartesian_product)%batch_size==0  else   len(cartesian_product) // batch_size + 1#MAY BE NEED TO CORRECT
 
@@ -635,7 +636,7 @@ def create_shaps(model,batch_size, val_month, columns_order, shop_item_pairs_in_
     preds_l = []
     Y_true_l_shop_item=[]
     
-    X_val, Y_val = create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn, batch_size_to_read,source_path)#but then cartesian product used
+    X_val, Y_val = create_batch_val(val_month, shop_item_pairs_in_dbn, batch_size_to_read,source_path)#but then cartesian product used
     shop_id = X_val.shop_id
     item_id = X_val.item_id
     
@@ -775,16 +776,15 @@ def get_or_create_experiment(experiment_name):
     else:
         return mlflow.create_experiment(experiment_name)
     
-def run_create_submission(path_for_merged, path_data_cleaned):
+def run_create_submission(path_for_merged, path_data_cleaned,batch_size_for_train):
     """
     Function for expanding window validation or creating submission. Reads hyperparameters from saved_dictionary.pkl and writes submission in the root
 
     Args:
-        s3c (object): client connection to minio
         path_for_merged (str): path to the folder where created by prepare_data.py file stored
         path_data_cleaned (str): path to the folder where created by etl.py file stored
         is_create_submission (bool): whether to infer model with sliding winfow validation or create submission
-
+        batch_size_for_train(int): 
     Returns:
         explainer,shap_values,X_val_to_ret
     """
@@ -805,7 +805,7 @@ def run_create_submission(path_for_merged, path_data_cleaned):
 
     batches_for_training=1
 
-    batch_size=100_000 
+    batch_size=batch_size_for_train
     
 
     with open(f'best_parameters.pkl', 'rb') as f:
@@ -858,6 +858,7 @@ if __name__ == '__main__':
     parser.add_argument('--path_for_merged', type=str,help='folder where merged.csv stored after prepare_data.py. Also best hyperparameters  stored in this folder')
     parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
     parser.add_argument('--path_artifact_storage', type=str, help='folder where shap images will be stored')
+    parser.add_argument('--batch_size_for_train', type=int)
     
 
     args = parser.parse_args()
@@ -865,7 +866,7 @@ if __name__ == '__main__':
 
     ACCESS_KEY = 'airflow_user'
     SECRET_KEY = 'airflow_paswword'
-    host = 'http://localhost:9000'
+    host = 'http://minio:9000'
     bucket_name = 'mlflow'
 
     s3c = boto3.resource('s3', 
@@ -885,11 +886,11 @@ if __name__ == '__main__':
 
     s3c.download_file(bucket_name, f'{args.run_name}/best_parameters.pkl', 'best_parameters.pkl')
     
-    mlflow.set_tracking_uri(uri="http://localhost:5000")
+    mlflow.set_tracking_uri(uri="http://mlflow:5000")
 
     exp = get_or_create_experiment('create_submission')
 
-    explainer, shaps, X_display = run_create_submission(args.path_for_merged, args.path_data_cleaned)
+    explainer, shaps, X_display = run_create_submission(args.path_for_merged, args.path_data_cleaned,args.batch_size_for_train)
 
     shap.plots.beeswarm(shaps, max_display=20,show=False)
     plt.title('SHAPs * 100')
@@ -901,9 +902,6 @@ if __name__ == '__main__':
     s3c.upload_file('shaps_bar.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_bar.png')
 
 
-    shap.initjs()
-    shap.force_plot(explainer.expected_value, shaps.values[10000, :], X_display.iloc[10000, :],show=False)
-    plt.savefig('shaps_force_plot.png')
-    s3c.upload_file('shaps_force_plot.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_force_plot.png')
+
 
     s3c.close()

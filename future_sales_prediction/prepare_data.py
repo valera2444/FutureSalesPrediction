@@ -638,7 +638,7 @@ if __name__ == '__main__':
     
     ACCESS_KEY = 'airflow_user'
     SECRET_KEY = 'airflow_paswword'
-    host = 'http://localhost:9000'
+    host = 'http://minio:9000'
     bucket_name = 'mlflow'
 
     s3c = boto3.resource('s3', 

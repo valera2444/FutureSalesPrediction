@@ -156,7 +156,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     client = boto3.client('s3',
-                      endpoint_url='http://localhost:9000',
+                      endpoint_url='http://minio:9000',
                       aws_access_key_id='airflow_user',
                       aws_secret_access_key='airflow_paswword')
 

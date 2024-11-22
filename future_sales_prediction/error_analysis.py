@@ -57,7 +57,7 @@ def download_files(args):
 
     ACCESS_KEY = 'airflow_user'
     SECRET_KEY = 'airflow_paswword'
-    host = 'http://localhost:9000'
+    host = 'http://minio:9000'
     bucket_name = 'mlflow'
 
     s3c = boto3.resource('s3', 
@@ -65,17 +65,18 @@ def download_files(args):
                     aws_secret_access_key=SECRET_KEY,
                     endpoint_url=host)
     
-
-    
+    download_s3_folder(s3c,bucket_name,args.path_data_cleaned, args.path_data_cleaned)
 
     s3c = boto3.client('s3', 
                     aws_access_key_id=ACCESS_KEY,
                     aws_secret_access_key=SECRET_KEY,
                     endpoint_url=host)
     
+    
+    
     s3c.download_file(bucket_name, f'{args.path_for_merged}/item_dbn_diff.csv', f'{args.path_for_merged}/item_dbn_diff.csv') # ASSUMES THAT path args.path_for_merged exists
     s3c.download_file(bucket_name, f'{args.path_for_merged}/val_preds.npy', f'{args.path_for_merged}/val_preds.npy') # ASSUMES THAT path args.path_for_merged exists
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/val_true.npy', f'{args.path_for_merged}/val_true.npy') # ASSUMES THAT path args.path_for_merged exists
+    s3c.download_file(bucket_name, f'{args.path_for_merged}/val_true.npy',f'{args.path_for_merged}/val_true.npy') # ASSUMES THAT path args.path_for_merged exists
     s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') 
 
 
@@ -132,9 +133,9 @@ def prepare_df(args):
     merged = pd.read_csv(SOURCE_PATH, usecols=cols)
         
     dbn_diff = pd.read_csv(f'{args.path_for_merged}/item_dbn_diff.csv')
-    dbn_diff_selected = dbn_diff[['shop_id','item_id',*[str(i) for i in range(22,24)]]]
+    dbn_diff_selected = dbn_diff[['shop_id','item_id',*[str(i) for i in range(22,26)]]]
     df_diff = pd.DataFrame({'shop_id':[], 'item_id':[],'date_block_num':[],'dbn_diff':[]})
-    for month in range(22,24):
+    for month in range(22,26):
         shop_id = dbn_diff_selected.shop_id
         item_id = dbn_diff_selected.item_id
         dbn = month
@@ -162,7 +163,7 @@ def prepare_df(args):
     df = pd.DataFrame({'shop_id':[], 'item_id':[],'date_block_num':[],'sales':[],'preds':[]})
     for month in range(len(real)):
         month_num = month+22
-        sales = real[month][:,0][0]
+        sales = real[month][:,0][0]#Critical
         shop_id=real[month][:,1][0]
         item_id=real[month][:,2][0]
         preds_val = preds[month][0]
@@ -176,7 +177,7 @@ def prepare_df(args):
 
 ACCESS_KEY = 'airflow_user'
 SECRET_KEY = 'airflow_paswword'
-host = 'http://localhost:9000'
+host = 'http://minio:9000'
 bucket_name = 'mlflow'
 
 
@@ -194,8 +195,8 @@ df = prepare_df(args)
 
 total_sails=df.groupby('date_block_num').agg({'sales':'mean','preds':'mean'})
 
-plt.plot(np.arange(22,24,dtype=int),total_sails['sales'], label='Total sales target' )
-plt.plot(np.arange(22,24,dtype=int),total_sails['preds'], label='Total sales predictions' )
+plt.plot(np.arange(22,25,dtype=int),total_sails['sales'], label='Total sales target' )
+plt.plot(np.arange(22,25,dtype=int),total_sails['preds'], label='Total sales predictions' )
 plt.legend()
 
 plt.xlabel('Sales')

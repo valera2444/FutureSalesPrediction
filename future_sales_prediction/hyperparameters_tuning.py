@@ -307,7 +307,6 @@ def sample_indexes(shop_item_pairs_WITH_PREV_in_dbn, number_of_batches):
     Samples indexes for batch learning. Indexes must be applied on shop_item_pairs_WITH_PREV_in_dbn
     Args:
         shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
-        batch_size (int): batch size for lgbm
         number_of_batches (int): number of batches for lgbm,
 
     Returns:
@@ -338,6 +337,7 @@ def prepare_batch_per_dbn(dbn, dbn_inner,last_monthes_to_take_in_train, shop_ite
         shop_item_pairs_WITH_PREV_in_dbn (_type_): _description_
         idxs (): indexes for shop_item_pairs_WITH_PREV_in_dbn for current date block num and batch
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
+        source_path (str):  path to folder where necessary data stored
 
     Returns:
         list: list of X,Y for current date_block_num
@@ -382,7 +382,7 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
         dbn (int): Date block number.
         shop_item_pairs_WITH_PREV_in_dbn (np.array[np.array[np.array[int]]]):  Accumulated cartesian products for each time block.
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
-
+        source_path (str):  path to folder where necessary data stored
     Yields:
         tuple: 
             - X (pd.DataFrame): Feature batch.
@@ -393,7 +393,7 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
     
     total_number_of_samples=sum(lengthes[dbn-last_monthes_to_take_in_train+1:dbn+1])
     number_of_batches = total_number_of_samples // batch_size if batch_size <= total_number_of_samples else 1
-
+    #print(number_of_batches)
     #This variable will store batch indexes for date_block_nums [ dbn-last_monthes_to_take_in_train+1 , dbn]
     idxs = sample_indexes(shop_item_pairs_WITH_PREV_in_dbn[dbn-last_monthes_to_take_in_train+1:dbn+1],number_of_batches)
     print('total batches,',number_of_batches)
@@ -437,15 +437,15 @@ def create_batch_train(batch_size, dbn, shop_item_pairs_WITH_PREV_in_dbn, batch_
         yield [l_x, l_y]#, test
 
 
-def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
+def create_batch_val(dbn, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
     """
     Creates validation batches for date_block_num.
 
     Args:
-        batch_size (int): Number of samples per batch.
         dbn (int): Date block number.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
+        source_path (str):  path to folder where necessary data stored
 
     Yields:
         tuple: 
@@ -456,9 +456,9 @@ def create_batch_val(batch_size, dbn, shop_item_pairs_in_dbn, batch_size_to_read
     
     shops = np.unique(list(zip(*val))[0])
     items = np.unique(list(zip(*val))[1])
-
-    cartesian_product = np.random.permutation (np.array(np.meshgrid(shops, items)).T.reshape(-1, 2))
     
+    cartesian_product = np.random.permutation (np.array(np.meshgrid(shops, items)).T.reshape(-1, 2))
+    batch_size = len(cartesian_product)+1
     chunk_num =  len(cartesian_product)// batch_size if len(cartesian_product)%batch_size==0  else   len(cartesian_product) // batch_size + 1#MAY BE NEED TO CORRECT
 
     columns = select_columns_for_reading(f'{source_path}/merged.csv', dbn)
@@ -514,6 +514,7 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
         batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
         shop_item_pairs_in_dbn (pd.DataFrame, optional): dataframe of cartesian products of (shop, item) for date_block_nums. If None, validation is not performed after every batch
+        source_path (str):  path to folder where necessary data stored
 
     Returns:
         tuple: 
@@ -599,7 +600,7 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
         print(f'train on batch {c} time,',t2_batch-t1_batch)
         
         if shop_item_pairs_in_dbn is not None:
-            val_pred, val_error = validate_model(model,batch_size, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path)
+            val_pred, val_error = validate_model(model, val_month,columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path)
             print(f'val score after batch {c}', val_error)
 
         c+=1
@@ -613,17 +614,17 @@ def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,b
 
     return model, columns_order
 
-def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
+def validate_model(model, val_month, columns_order, shop_item_pairs_in_dbn, batch_size_to_read,source_path):
     """
     Validates the model and calculates RMSE on the validation set on the current val_month.
 
     Args:
-        model (object): Machine learning model to be validated.
-        batch_size (int): Number of samples per batch.
+        model (object): Machine learning model to be validated.=
         val_month (int): Month used for validation.
         columns_order (list[str]): Order of feature columns.
         shop_item_pairs_in_dbn (pd.DataFrame): dataframe of cartesian products of (shop, item) for date_block_nums
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
+        source_path (str):  path to folder where necessary data stored
 
     Returns:
         tuple: 
@@ -637,7 +638,7 @@ def validate_model(model,batch_size, val_month, columns_order, shop_item_pairs_i
     Y_true_l = []
     preds_l = []
     
-    for X_val, Y_val in create_batch_val(batch_size, val_month, shop_item_pairs_in_dbn, batch_size_to_read,source_path):#but then cartesian product used
+    for X_val, Y_val in create_batch_val(val_month, shop_item_pairs_in_dbn, batch_size_to_read,source_path):#but then cartesian product used
         if X_val is None:
                     continue
         
@@ -712,6 +713,7 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
         shop_item_pairs_WITH_PREV_in_dbn ( np.array[np.array[np.array[int,int]]] ): array of accumulated cartesian products of (shop, item) for date_block_nums
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
         batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
+        source_path(str): path to folder where necessary data stored
         experiment_id (str): mlflow experiment id
     Returns:
         tuple: 
@@ -758,7 +760,6 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
 
             val_pred, val_error = validate_model(
                 model,
-                batch_size,
                 val_month,
                 columns_order,
                 shop_item_pairs_in_dbn,
@@ -783,19 +784,22 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
     
 
 
-def objective(trial,val_monthes,shop_item_pairs_in_dbn,shop_item_pairs_WITH_PREV_in_dbn,source_path,experiment_id):
+def objective(trial,val_monthes,shop_item_pairs_in_dbn,shop_item_pairs_WITH_PREV_in_dbn,source_path,experiment_id,
+              max_num_leaves_range_optuna,batch_size_for_train,lr_range_optuna,num_estimators_range_optuna ):
+    
+    
     with mlflow.start_run(experiment_id=experiment_id, run_name='run 23,30,33',nested=True):
         val_monthes_str = [str(i) for i in val_monthes]
-        lr = trial.suggest_float('lr', low=0.002, high = 0.07,log=True)
-        num_leaves = trial.suggest_int('num_leaves', low=32, high = 256,step=50)
-        n_estimators=trial.suggest_int('n_estimators', low=100, high = 100,step=100)
+        lr = trial.suggest_float('lr', low=lr_range_optuna[0], high = lr_range_optuna[1],log=True)
+        num_leaves = trial.suggest_int('num_leaves', low=max_num_leaves_range_optuna[0], high = max_num_leaves_range_optuna[1],step=50)
+        n_estimators=trial.suggest_int('n_estimators', low=num_estimators_range_optuna[0], high = num_estimators_range_optuna[1],step=50)
 
         #parametrs which doesnt affect training
         batch_size_to_read=50_000 # the more batches_for_training - the less should be batch_size_to_read to prevent memory error
 
         #parametrs which affect number of estimators:
         batches_for_training=1#each batch increases number of estimators with n_estimators
-        batch_size=100_000 #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
+        batch_size=batch_size_for_train #(real batch size will be a bit different from this). In fact this is used only to find number of batchs
 
 
         print('validation started...')
@@ -825,16 +829,26 @@ def objective(trial,val_monthes,shop_item_pairs_in_dbn,shop_item_pairs_WITH_PREV
         mlflow.log_metric('rmse', np.mean(val_errors))
         return np.mean(val_errors)
 
-def run_optimizing(path_for_merged, path_data_cleaned, n_trials, experiment_id):
+def run_optimizing(args, experiment_id):
     """
     Function for hyperparameters tuning. Writes best parametrs to ./saved_dictionary.pkl
 
     Args:
-        path_for_merged (str): path to the file created by prepare_data.py
-        path_data_cleaned (str): path to the directory with data creaed by etl.py
-        n_trials (int): number of iterations to run optuna
+        args (): parsed arguments from CLI
         experiment_id (str): experiment id for mlflow
     """
+    path_for_merged = args.path_for_merged
+    path_data_cleaned= args.path_data_cleaned
+    n_trials=args.n_trials
+
+    max_num_leaves_range_optuna = args.max_num_leaves_range_optuna
+    batch_size_for_train = args.batch_size_for_train
+    lr_range_optuna=args.lr_range_optuna
+    num_estimators_range_optuna = args.num_estimators_range_optuna
+
+    print(batch_size_for_train)
+
+
     data_train = pd.read_csv(f'{path_data_cleaned}/data_train.csv')
     test = pd.read_csv(f'{path_data_cleaned}/test.csv')
     test['date_block_num'] = 34
@@ -843,7 +857,7 @@ def run_optimizing(path_for_merged, path_data_cleaned, n_trials, experiment_id):
 
     shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn = prepare_past_ID_s_CARTESIAN(data_train)
 
-    val_monthes=[23,30,33]
+    val_monthes=[23,30]
 
     val_monthes_str = [str(i) for i in val_monthes]
 
@@ -852,7 +866,12 @@ def run_optimizing(path_for_merged, path_data_cleaned, n_trials, experiment_id):
                          shop_item_pairs_in_dbn=shop_item_pairs_in_dbn,
                          shop_item_pairs_WITH_PREV_in_dbn=shop_item_pairs_WITH_PREV_in_dbn,
                          source_path=path_for_merged,
-                         experiment_id=experiment_id)
+                         experiment_id=experiment_id,
+
+                         max_num_leaves_range_optuna=max_num_leaves_range_optuna,
+                         batch_size_for_train=batch_size_for_train,
+                         lr_range_optuna=lr_range_optuna,
+                         num_estimators_range_optuna=num_estimators_range_optuna)
 
     study = optuna.create_study(direction="minimize")
 
@@ -907,17 +926,23 @@ def get_or_create_experiment(experiment_name):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+
     parser.add_argument('--run_name', type=str)
     parser.add_argument('--path_for_merged', type=str, help='folder where merged.csv stored after prepare_data.py. Also best hyperparams will be stored here')
     parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
     parser.add_argument('--n_trials', type=int, help='Number of iteration for TPE estimator')
 
+    parser.add_argument('--max_num_leaves_range_optuna',nargs=2, type=int)
+    parser.add_argument('--lr_range_optuna',nargs=2, type=float)
+    parser.add_argument('--num_estimators_range_optuna',nargs=2, type=int)
+    parser.add_argument('--batch_size_for_train', type=int)
+
     args = parser.parse_args()
 
-
+    #print(args.batch_size_for_train)
     ACCESS_KEY = 'airflow_user'
     SECRET_KEY = 'airflow_paswword'
-    host = 'http://localhost:9000'
+    host = 'http://minio:9000'
     bucket_name = 'mlflow'
 
     s3c = boto3.resource('s3', 
@@ -935,12 +960,12 @@ if __name__ == '__main__':
     
     s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') # ASSUMES THAT path args.path_for_merged exists
 
-    mlflow.set_tracking_uri(uri="http://localhost:5000")
+    mlflow.set_tracking_uri(uri="http://mlflow:5000")
     exp = get_or_create_experiment('hyperparameter_optimiztion')
 
-    with mlflow.start_run(experiment_id=exp, run_name='run 23,30,33'):
+    with mlflow.start_run(experiment_id=exp, run_name=args.run_name):
         
-        bp =run_optimizing(args.path_for_merged, args.path_data_cleaned, args.n_trials,exp)
+        bp =run_optimizing(args,exp)
 
     s3c.upload_file('best_parameters.pkl', bucket_name, f'{args.run_name}/best_parameters.pkl')
 
