@@ -857,7 +857,7 @@ def run_optimizing(args, experiment_id):
 
     shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn = prepare_past_ID_s_CARTESIAN(data_train)
 
-    val_monthes=[23,30]
+    val_monthes=[23,30,33]
 
     val_monthes_str = [str(i) for i in val_monthes]
 

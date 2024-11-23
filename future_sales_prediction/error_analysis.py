@@ -133,9 +133,9 @@ def prepare_df(args):
     merged = pd.read_csv(SOURCE_PATH, usecols=cols)
         
     dbn_diff = pd.read_csv(f'{args.path_for_merged}/item_dbn_diff.csv')
-    dbn_diff_selected = dbn_diff[['shop_id','item_id',*[str(i) for i in range(22,26)]]]
+    dbn_diff_selected = dbn_diff[['shop_id','item_id',*[str(i) for i in range(22,35)]]]
     df_diff = pd.DataFrame({'shop_id':[], 'item_id':[],'date_block_num':[],'dbn_diff':[]})
-    for month in range(22,26):
+    for month in range(22,35):
         shop_id = dbn_diff_selected.shop_id
         item_id = dbn_diff_selected.item_id
         dbn = month
@@ -195,8 +195,8 @@ df = prepare_df(args)
 
 total_sails=df.groupby('date_block_num').agg({'sales':'mean','preds':'mean'})
 
-plt.plot(np.arange(22,25,dtype=int),total_sails['sales'], label='Total sales target' )
-plt.plot(np.arange(22,25,dtype=int),total_sails['preds'], label='Total sales predictions' )
+plt.plot(np.arange(22,34,dtype=int),total_sails['sales'], label='Total sales target' )
+plt.plot(np.arange(22,34,dtype=int),total_sails['preds'], label='Total sales predictions' )
 plt.legend()
 
 plt.xlabel('Sales')

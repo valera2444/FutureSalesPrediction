@@ -985,7 +985,7 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
     if not create_submission:
 
         
-        val_monthes=range(22,25)
+        val_monthes=range(22,34)
 
         print('validation started...')
         
@@ -1082,8 +1082,8 @@ if __name__ == '__main__':
 
     with mlflow.start_run(experiment_id=exp, run_name=args.run_name):
         model=run_create_submission(args.path_for_merged, args.path_data_cleaned, args.is_create_submission,experiment_id=exp,batch_size_for_train=args.batch_size_for_train)
-
-        mlflow.lightgbm.log_model(model, artifact_path=f'{args.run_name}/LGBM_model_1')
+        if  args.is_create_submission:
+            mlflow.lightgbm.log_model(model, artifact_path=f'{args.run_name}/LGBM_model_1')
 
     if args.is_create_submission:
         s3c.upload_file('submission.csv', bucket_name, f'{args.run_name}/submission.csv')

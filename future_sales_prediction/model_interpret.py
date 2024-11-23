@@ -73,15 +73,11 @@ def prepare_past_ID_s_CARTESIAN(data_train):
             
     """
     data_train['shop_item'] = [tuple([shop, item]) for shop, item in zip(data_train['shop_id'], data_train['item_id'])]
-    #34 block contains A LOT more shop_item than others
     shop_item_pairs_in_dbn = data_train.groupby('date_block_num')['shop_item'].apply(np.unique)
     data_train = data_train.drop(['shop_item'], axis=1)
     
     shop_item_pairs_WITH_PREV_in_dbn = np.array([None] * len(shop_item_pairs_in_dbn))
     
-    #print(np.array(shop_item_pairs_WITH_PREV_in_dbn.index))
-    
-
     cartesians = []
     for dbn in shop_item_pairs_in_dbn.index:
         val = shop_item_pairs_in_dbn[dbn]
@@ -193,9 +189,7 @@ def prepare_data_train_boosting(data, valid, dbn):
         if len(splitted) == 1:
                 lag_cols.append(col)
                 continue
-        #if 'shop_item_cnt' not in col:
-        #    continue
-            
+       
         for db in range(0,dbn-1):
             
             if db == int(splitted[1]):
@@ -740,6 +734,7 @@ def download_s3_folder(s3c, bucket_name, s3_folder, local_dir=None):
     """
     Download the contents of a folder directory to local_dir (creates if not exist)
     Args:
+        s3c: s3 resource
         bucket_name: the name of the s3 bucket
         s3_folder: the folder path in the s3 bucket
         local_dir: a relative or absolute directory path in the local file system
