@@ -46,26 +46,31 @@ def read_args():
     parser.add_argument('--path_for_merged', type=str, help='folder where error arrays stored (same as folder where merged.csv stored)')
     parser.add_argument('--path_data_cleaned', type=str)
     parser.add_argument('--path_artifact_storage', type=str, help='folder name in s3 storage where artifacts will be stored')
+    parser.add_argument('--test_month', type=int, help='month to create submission on')
 
 
     args = parser.parse_args()
     return args
 
 
+args = read_args()
+minio_user=os.environ.get("MINIO_ACCESS_KEY")
+minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
+bucket_name = os.environ.get("BUCKET_NAME")
 
 def download_files(args):
 
-    ACCESS_KEY = 'airflow_user'
-    SECRET_KEY = 'airflow_paswword'
+    ACCESS_KEY = minio_user
+    SECRET_KEY = minio_password
     host = 'http://minio:9000'
-    bucket_name = 'mlflow'
+    bucket_name_inner = bucket_name
 
     s3c = boto3.resource('s3', 
                     aws_access_key_id=ACCESS_KEY,
                     aws_secret_access_key=SECRET_KEY,
                     endpoint_url=host)
     
-    download_s3_folder(s3c,bucket_name,args.path_data_cleaned, args.path_data_cleaned)
+    download_s3_folder(s3c,bucket_name_inner,args.path_data_cleaned, args.path_data_cleaned)
 
     s3c = boto3.client('s3', 
                     aws_access_key_id=ACCESS_KEY,
@@ -74,10 +79,10 @@ def download_files(args):
     
     
     
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/item_dbn_diff.csv', f'{args.path_for_merged}/item_dbn_diff.csv') # ASSUMES THAT path args.path_for_merged exists
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/val_preds.npy', f'{args.path_for_merged}/val_preds.npy') # ASSUMES THAT path args.path_for_merged exists
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/val_true.npy',f'{args.path_for_merged}/val_true.npy') # ASSUMES THAT path args.path_for_merged exists
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') 
+    s3c.download_file(bucket_name_inner, f'{args.path_for_merged}/item_dbn_diff.csv', f'{args.path_for_merged}/item_dbn_diff.csv') # ASSUMES THAT path args.path_for_merged exists
+    s3c.download_file(bucket_name_inner, f'{args.path_for_merged}/val_preds.npy', f'{args.path_for_merged}/val_preds.npy') # ASSUMES THAT path args.path_for_merged exists
+    s3c.download_file(bucket_name_inner, f'{args.path_for_merged}/val_true.npy',f'{args.path_for_merged}/val_true.npy') # ASSUMES THAT path args.path_for_merged exists
+    s3c.download_file(bucket_name_inner, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') 
 
 
 
@@ -133,9 +138,9 @@ def prepare_df(args):
     merged = pd.read_csv(SOURCE_PATH, usecols=cols)
         
     dbn_diff = pd.read_csv(f'{args.path_for_merged}/item_dbn_diff.csv')
-    dbn_diff_selected = dbn_diff[['shop_id','item_id',*[str(i) for i in range(22,35)]]]
+    dbn_diff_selected = dbn_diff[['shop_id','item_id',*[str(i) for i in range(args.test_month-12,args.test_month+1)]]]
     df_diff = pd.DataFrame({'shop_id':[], 'item_id':[],'date_block_num':[],'dbn_diff':[]})
-    for month in range(22,35):
+    for month in range(args.test_month-12,args.test_month+1):
         shop_id = dbn_diff_selected.shop_id
         item_id = dbn_diff_selected.item_id
         dbn = month
@@ -156,13 +161,13 @@ def prepare_df(args):
     merged=merged.merge(shops_f, how='left').merge(categories_f, how='left')
 
 
-    #Assume that monthes are [22,34]  
+    #Assume that monthes are [args.test_month - 12,args.test_month]  
     preds = np.load(f'{args.path_for_merged}/val_preds.npy',allow_pickle=True)#preds_l.append(y_val_pred)
     real = np.load(f'{args.path_for_merged}/val_true.npy',allow_pickle=True)#Y_true_l.append([np.array(Y_val).flatten(), np.array(shop_id).flatten(), np.array(item_id).flatten()])
 
     df = pd.DataFrame({'shop_id':[], 'item_id':[],'date_block_num':[],'sales':[],'preds':[]})
     for month in range(len(real)):
-        month_num = month+22
+        month_num = month+args.test_month-12
         sales = real[month][:,0][0]#Critical
         shop_id=real[month][:,1][0]
         item_id=real[month][:,2][0]
@@ -175,10 +180,11 @@ def prepare_df(args):
     return df
 
 
-ACCESS_KEY = 'airflow_user'
-SECRET_KEY = 'airflow_paswword'
+
+ACCESS_KEY = minio_user
+SECRET_KEY = minio_password
 host = 'http://minio:9000'
-bucket_name = 'mlflow'
+bucket_name = bucket_name
 
 
 s3c = boto3.client('s3', 
@@ -186,7 +192,7 @@ s3c = boto3.client('s3',
                 aws_secret_access_key=SECRET_KEY,
                 endpoint_url=host)
 
-args = read_args()
+
 
 download_files(args)
 
@@ -195,8 +201,8 @@ df = prepare_df(args)
 
 total_sails=df.groupby('date_block_num').agg({'sales':'mean','preds':'mean'})
 
-plt.plot(np.arange(22,34,dtype=int),total_sails['sales'], label='Total sales target' )
-plt.plot(np.arange(22,34,dtype=int),total_sails['preds'], label='Total sales predictions' )
+plt.plot(np.arange(args.test_month-12,args.test_month,dtype=int),total_sails['sales'], label='Total sales target' )
+plt.plot(np.arange(args.test_month-12,args.test_month,dtype=int),total_sails['preds'], label='Total sales predictions' )
 plt.legend()
 
 plt.xlabel('Sales')

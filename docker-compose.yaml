@@ -54,8 +54,8 @@ x-airflow-common:
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/airflow
     AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
@@ -97,7 +97,7 @@ services:
       - postgres-db-volume:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
       interval: 10s
       retries: 5
       start_period: 5s
@@ -169,6 +169,9 @@ services:
       # Required to handle warm shutdown of the celery workers properly
       # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
+      BUCKET_NAME: ${BUCKET_NAME}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_SECRET_ACCESS_KEY}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
@@ -200,6 +203,7 @@ services:
     command:
       - -c
       - |
+        
         if [[ -z "${AIRFLOW_UID}" ]]; then
           echo
           echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
@@ -246,18 +250,18 @@ services:
         chown -R "${AIRFLOW_UID}:0" /sources/{logs,dags,plugins}
         
 
-        airflow users create --role Admin --username airflow --password airflow -e airflow@airflow.com -f airflow -l airflow
+        
 
-        exec /entrypoint airflow db migrate
+        exec /entrypoint airflow version
       
     #exec /entrypoint airflow version
     # yamllint enable rule:line-length
     environment:
       <<: *airflow-common-env
-      #_AIRFLOW_DB_MIGRATE: 'true'
-      #_AIRFLOW_WWW_USER_CREATE: 'true'
-      #_AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
-      #_AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_USER}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_PASSWORD}
       #_PIP_ADDITIONAL_REQUIREMENTS: ''
     #user: "0:0"
     volumes:
@@ -322,8 +326,8 @@ services:
     entrypoint: >
       /bin/sh -c "
       until (/usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_ACCESS_KEY}) do echo '...waiting...' && sleep 1; done;
-      /usr/bin/mc mb myminio/mlflow;
-      /usr/bin/mc policy set download myminio/mlflow;
+      /usr/bin/mc mb myminio/${BUCKET_NAME};
+      /usr/bin/mc policy set download myminio/${BUCKET_NAME};
       exit 0;
       "
     environment:
@@ -350,7 +354,7 @@ services:
       --host 0.0.0.0
       --port 5000
       --serve-artifacts
-      --artifacts-destination s3://mlflow
+      --artifacts-destination s3://${BUCKET_NAME}
     depends_on:
       postgres:
         condition: service_started

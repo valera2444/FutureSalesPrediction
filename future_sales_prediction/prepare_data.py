@@ -124,7 +124,7 @@ def create_pivot_table(data,index, item_shop_city_category_sup_category,column='
     merged.columns = [str(col) for col in merged.columns]
     return merged
 
-def calculate_ema_6(table, alpha=2/(6+1)):
+def calculate_ema_6(table, alpha=2/(6+1),test_month=None):
     """
     Calculates the 6-month Exponential Moving Average (EMA) for each record and month.
     
@@ -143,7 +143,7 @@ def calculate_ema_6(table, alpha=2/(6+1)):
     weights = (1 - alpha) ** np.arange(6)[::-1]#???
     print('EMAs weights:',weights)
     
-    for dbn in range(EMA_period, 35):#???(35)
+    for dbn in range(EMA_period, test_month+1):#???(35)
         lag_cols =  [str(i) for i in range(dbn - EMA_period+1, dbn+1)]
         
         df_in = table[lag_cols].fillna(0)
@@ -156,7 +156,7 @@ def calculate_ema_6(table, alpha=2/(6+1)):
 
 
 
-def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_category_sup_category=None,is_cnt=True):
+def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_category_sup_category=None,is_cnt=True, test_month=None):
     """
     Calculates EMA for specified groupings and returns metrics based on a given column type.
     
@@ -166,6 +166,7 @@ def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_categ
         alpha (float): EMA smoothing factor.
         item_shop_city_category_sup_category (pd.DataFrame): Datarame with unique [shop, item] pairs. Used to return data with all requierd [shop, item] pairs.
         is_cnt (bool): Whether to use item count data; set to False for price data.
+        test_month (int): 
 
     Returns:
         pd.DataFrame: Aggregated table with EMAs calculated for the specified groupings.
@@ -175,20 +176,20 @@ def calculate_EMAs_pipeline(source, groupby, alpha=2/(6+1), item_shop_city_categ
     #means = find_mean_by(source, groupby, item_shop_city_category_sup_category,is_cnt)
     if np.isclose(alpha , 1.0):
         numerical = [col for col in means.columns if col.isdigit()]
-        numerical = [col for col in numerical if int(col) < 35]#include 34 as precise value calculated by this function
+        numerical = [col for col in numerical if int(col) < test_month+1]#include 34 as precise value calculated by this function
 
         train = means[['shop_id','item_id', *numerical]]
         return train
     
-    emas = calculate_ema_6(means, alpha)
+    emas = calculate_ema_6(means, alpha,test_month)
     
     numerical = [col for col in emas.columns if col.isdigit()]
-    numerical = [col for col in numerical if int(col) < 35]
+    numerical = [col for col in numerical if int(col) < test_month+1]
 
     train = emas[['shop_id','item_id', *numerical]]
     return train
     
-def calculate_diff(df):
+def calculate_diff(df, test_month):
     """
     Calculates time difference since first occurrence for each item in each month.
     
@@ -202,7 +203,7 @@ def calculate_diff(df):
 
     df['-1'] = 0.0
 
-    for dbn in range(0,35):
+    for dbn in range(0,test_month+1):
         month_columns = [str(i) for i in range(-1,dbn+1)]
         
         
@@ -318,7 +319,7 @@ def merge_boosting(item_shops, names, chunksize=None,item_shop_city_category_sup
     print('names in merged,',names )
 
 
-def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1),destination_path=None):
+def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1),destination_path=None,test_month=None):
     """
     Creates and saves files containing various featues.
 
@@ -350,7 +351,8 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
                                          gr, 
                                          alpha=alpha,
                                          item_shop_city_category_sup_category=item_shop_city_category_sup_category,
-                                         is_cnt=True)
+                                         is_cnt=True,
+                                         test_month=test_month)
         #print(train)
         train.to_csv(f'{destination_path}/ema_{"_".join(gr)}.csv', index=False)
         t2 = time.time()
@@ -369,7 +371,8 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
                                          gr, 
                                          alpha=1.0,
                                          item_shop_city_category_sup_category=item_shop_city_category_sup_category,
-                                         is_cnt=True)
+                                         is_cnt=True,
+                                         test_month=test_month)
         #print(train)
         
         train.to_csv(f'{destination_path}/value_{"_".join(gr)}.csv', index=False)
@@ -386,7 +389,8 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
                                          gr, 
                                          alpha=1.0,
                                          item_shop_city_category_sup_category=item_shop_city_category_sup_category,
-                                         is_cnt=False)
+                                         is_cnt=False,
+                                         test_month=test_month)
         #print(train)
         
         train.to_csv(f'{destination_path}/value_price_{"_".join(gr)}.csv', index=False)
@@ -399,7 +403,8 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
                                                 ['item_id'], 
                                                 item_shop_city_category_sup_category=item_shop_city_category_sup_category,
                                                 alpha=1.0,
-                                                is_cnt=True)
+                                                is_cnt=True,
+                                                test_month=test_month)
     
     changes = create_change(mean_cnt_items)
     changes.to_csv(f'{destination_path}/item_cnt_change.csv', index=False)
@@ -414,7 +419,8 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
                                                 ['item_id'], 
                                                 item_shop_city_category_sup_category=item_shop_city_category_sup_category,
                                                 alpha=1.0,
-                                                is_cnt=False)
+                                                is_cnt=False,
+                                                test_month=test_month)
     
     changes = create_change(mean_prices_items)
     changes.to_csv(f'{destination_path}/item_price_change.csv', index=False)
@@ -424,7 +430,7 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
 
     t1 = time.time()
     value_item_sales = pd.read_csv(f'{destination_path}/value_item_id.csv')
-    diff=calculate_diff(value_item_sales)
+    diff=calculate_diff(value_item_sales,test_month)
     diff.to_csv(f'{destination_path}/item_dbn_diff.csv', index=False)
     t2 = time.time()
     print(f'dbn diff calculated; time:', t2-t1)
@@ -432,7 +438,7 @@ def prepare_files(data_train, item_shop_city_category_sup_category, alpha=2/(6+1
     return names
 
 
-def calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunksize_when_writing,destination_path):
+def calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunksize_when_writing,destination_path,test_month):
 
     """
     Calculates and writes EMA metrics and other statistics in chunks to handle large data sizes.
@@ -446,7 +452,7 @@ def calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunks
 
     alpha=0.0
     print('prepare_files started..')
-    names = prepare_files(data_train,item_shop_city_category_sup_category, alpha=alpha,destination_path=destination_path)
+    names = prepare_files(data_train,item_shop_city_category_sup_category, alpha=alpha,destination_path=destination_path,test_month=test_month)
     print('prepare_files finished')
     
     prepare_for_boosting=True
@@ -555,7 +561,7 @@ def create_item_shop_city_category_super_category(shop_city_pairs, merged):
     return merged[['shop_id','item_id','item_category_id','city','super_category']]
 
 
-def run_prepare_data(source_path, destination_path):
+def run_prepare_data(source_path, destination_path, test_month):
     """
     
 
@@ -569,7 +575,7 @@ def run_prepare_data(source_path, destination_path):
     items = pd.read_csv(f'{source_path}/items.csv')
     shops = pd.read_csv(f'{source_path}/shops.csv')
     test = pd.read_csv(f'{source_path}/test.csv')
-    test['date_block_num'] = 34
+    test['date_block_num'] = test_month
     data_train = data_train.merge(test, on=['item_id','shop_id','date_block_num'], how='outer').fillna(0)
 
 
@@ -604,7 +610,7 @@ def run_prepare_data(source_path, destination_path):
 
 
     for item_shop_city_category_sup_category in prepare_batches(past,item_shop_city_category_sup_category, chunk_size=chunk_size):
-        calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunksize_when_writing,destination_path)
+        calc_and_write_chunk(data_train,item_shop_city_category_sup_category, chunksize_when_writing,destination_path,test_month)
         first = False
     total_time2 = time.time()
     print('total data preparation time,',total_time2-total_time1)
@@ -631,15 +637,21 @@ def download_s3_folder(s3c, bucket_name, s3_folder, local_dir=None):
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--test_month', type=int, help='month to create submission on')
+
     parser.add_argument('--run_name', type=str)
     parser.add_argument('--source_path', type=str, help='folder where data stored after etl.py')
     parser.add_argument('--destination_path', type=str, help='path where merged.csv will be stored')
     args = parser.parse_args()
+
+    minio_user=os.environ.get("MINIO_ACCESS_KEY")
+    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
+    bucket_name = os.environ.get("BUCKET_NAME")
     
-    ACCESS_KEY = 'airflow_user'
-    SECRET_KEY = 'airflow_paswword'
+    ACCESS_KEY = minio_user
+    SECRET_KEY =  minio_password
     host = 'http://minio:9000'
-    bucket_name = 'mlflow'
+    bucket_name = bucket_name
 
     s3c = boto3.resource('s3', 
                     aws_access_key_id=ACCESS_KEY,
@@ -649,7 +661,7 @@ if __name__ == '__main__':
 
     download_s3_folder(s3c,bucket_name,args.source_path,args.source_path)
 
-    run_prepare_data(args.source_path, args.destination_path)
+    run_prepare_data(args.source_path, args.destination_path, args.test_month)
 
     s3c = boto3.client('s3', 
                     aws_access_key_id=ACCESS_KEY,

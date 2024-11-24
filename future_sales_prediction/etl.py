@@ -9,13 +9,15 @@ import boto3
 from io import StringIO
 from io import BytesIO
 
-def run_etl(client, source_path, destination_path):
+def run_etl(client, source_path, destination_path, bucket_name):
     """
     runs etl and writes cleaned data into data_cleaned/{file_name}.csv
 
     Args:
+        client (object): s3 client
         source_path (str): path to the source data folder
         destination_path (str): path to the destination data folder
+        bucket_name (str): bucket namr in s3 storage
     """
     #data_train = pd.read_csv(f'{source_path}/sales_train.csv')
     #data_test = pd.read_csv(f'{source_path}/test.csv')
@@ -25,7 +27,7 @@ def run_etl(client, source_path, destination_path):
     #shops = pd.read_csv(f'{source_path}/shops.csv')
     
 
-    bucket_name = 'mlflow'
+    bucket_name = bucket_name
     
 
     object_key = f'{source_path}/sales_train.csv'
@@ -87,31 +89,31 @@ def run_etl(client, source_path, destination_path):
     csv_bytes = data_train.to_csv(index=False).encode('utf-8')
     csv_buffer = BytesIO(csv_bytes)
     client.put_object(Body=csv_buffer,
-                    Bucket='mlflow',
+                    Bucket=bucket_name,
                     Key=f'{destination_path}/data_train.csv')
     
     csv_bytes = item_cat.to_csv(index=False).encode('utf-8')
     csv_buffer = BytesIO(csv_bytes)
     client.put_object(Body=csv_buffer,
-                    Bucket='mlflow',
+                    Bucket=bucket_name,
                     Key=f'{destination_path}/item_categories.csv')
     
     csv_bytes = shops.to_csv(index=False).encode('utf-8')
     csv_buffer = BytesIO(csv_bytes)
     client.put_object(Body=csv_buffer,
-                    Bucket='mlflow',
+                    Bucket=bucket_name,
                     Key=f'{destination_path}/shops.csv')
     
     csv_bytes = items.to_csv(index=False).encode('utf-8')
     csv_buffer = BytesIO(csv_bytes)
     client.put_object(Body=csv_buffer,
-                    Bucket='mlflow',
+                    Bucket=bucket_name,
                     Key=f'{destination_path}/items.csv')
     
     csv_bytes = data_test.to_csv(index=False).encode('utf-8')
     csv_buffer = BytesIO(csv_bytes)
     client.put_object(Body=csv_buffer,
-                    Bucket='mlflow',
+                    Bucket=bucket_name,
                     Key=f'{destination_path}/test.csv')
     
 
@@ -154,11 +156,15 @@ if __name__ == '__main__':
     parser.add_argument('--destination_path', type=str, help='folder where data after etl will be stored')
 
     args = parser.parse_args()
+    minio_user=os.environ.get("MINIO_ACCESS_KEY")
+    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
+    bucket_name = os.environ.get("BUCKET_NAME")
 
+    
     client = boto3.client('s3',
                       endpoint_url='http://minio:9000',
-                      aws_access_key_id='airflow_user',
-                      aws_secret_access_key='airflow_paswword')
+                      aws_access_key_id=minio_user,
+                      aws_secret_access_key=minio_password)
 
 
-    run_etl(client, args.source_path, args.destination_path)
+    run_etl(client, args.source_path, args.destination_path, bucket_name)

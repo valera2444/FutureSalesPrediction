@@ -788,7 +788,7 @@ def objective(trial,val_monthes,shop_item_pairs_in_dbn,shop_item_pairs_WITH_PREV
               max_num_leaves_range_optuna,batch_size_for_train,lr_range_optuna,num_estimators_range_optuna ):
     
     
-    with mlflow.start_run(experiment_id=experiment_id, run_name='run 23,30,33',nested=True):
+    with mlflow.start_run(experiment_id=experiment_id, run_name='run opt',nested=True):
         val_monthes_str = [str(i) for i in val_monthes]
         lr = trial.suggest_float('lr', low=lr_range_optuna[0], high = lr_range_optuna[1],log=True)
         num_leaves = trial.suggest_int('num_leaves', low=max_num_leaves_range_optuna[0], high = max_num_leaves_range_optuna[1],step=50)
@@ -829,13 +829,14 @@ def objective(trial,val_monthes,shop_item_pairs_in_dbn,shop_item_pairs_WITH_PREV
         mlflow.log_metric('rmse', np.mean(val_errors))
         return np.mean(val_errors)
 
-def run_optimizing(args, experiment_id):
+def run_optimizing(args, experiment_id, test_month):
     """
     Function for hyperparameters tuning. Writes best parametrs to ./saved_dictionary.pkl
 
     Args:
         args (): parsed arguments from CLI
         experiment_id (str): experiment id for mlflow
+        test_month (int): 
     """
     path_for_merged = args.path_for_merged
     path_data_cleaned= args.path_data_cleaned
@@ -851,13 +852,13 @@ def run_optimizing(args, experiment_id):
 
     data_train = pd.read_csv(f'{path_data_cleaned}/data_train.csv')
     test = pd.read_csv(f'{path_data_cleaned}/test.csv')
-    test['date_block_num'] = 34
+    test['date_block_num'] = test_month
     data_train = pd.concat([data_train,test ], ignore_index=True).drop('ID', axis=1).fillna(0)
 
 
     shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn = prepare_past_ID_s_CARTESIAN(data_train)
 
-    val_monthes=[23,30,33]
+    val_monthes=[test_month-12,test_month-9,test_month-3,test_month-1]
 
     val_monthes_str = [str(i) for i in val_monthes]
 
@@ -927,6 +928,8 @@ def get_or_create_experiment(experiment_name):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
+    parser.add_argument('--test_month', type=int, help='month to create submission on')
+
     parser.add_argument('--run_name', type=str)
     parser.add_argument('--path_for_merged', type=str, help='folder where merged.csv stored after prepare_data.py. Also best hyperparams will be stored here')
     parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
@@ -939,11 +942,15 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    minio_user=os.environ.get("MINIO_ACCESS_KEY")
+    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
+    bucket_name = os.environ.get("BUCKET_NAME")
+
     #print(args.batch_size_for_train)
-    ACCESS_KEY = 'airflow_user'
-    SECRET_KEY = 'airflow_paswword'
+    ACCESS_KEY = minio_user
+    SECRET_KEY = minio_password
     host = 'http://minio:9000'
-    bucket_name = 'mlflow'
+    bucket_name = bucket_name
 
     s3c = boto3.resource('s3', 
                     aws_access_key_id=ACCESS_KEY,
@@ -965,7 +972,7 @@ if __name__ == '__main__':
 
     with mlflow.start_run(experiment_id=exp, run_name=args.run_name):
         
-        bp =run_optimizing(args,exp)
+        bp =run_optimizing(args,exp,args.test_month)
 
     s3c.upload_file('best_parameters.pkl', bucket_name, f'{args.run_name}/best_parameters.pkl')
 

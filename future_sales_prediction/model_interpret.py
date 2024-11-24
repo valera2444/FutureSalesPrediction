@@ -771,7 +771,7 @@ def get_or_create_experiment(experiment_name):
     else:
         return mlflow.create_experiment(experiment_name)
     
-def run_create_submission(path_for_merged, path_data_cleaned,batch_size_for_train):
+def run_create_submission(path_for_merged, path_data_cleaned,batch_size_for_train, test_month):
     """
     Function for expanding window validation or creating submission. Reads hyperparameters from saved_dictionary.pkl and writes submission in the root
 
@@ -780,6 +780,7 @@ def run_create_submission(path_for_merged, path_data_cleaned,batch_size_for_trai
         path_data_cleaned (str): path to the folder where created by etl.py file stored
         is_create_submission (bool): whether to infer model with sliding winfow validation or create submission
         batch_size_for_train(int): 
+        test_month (int): 
     Returns:
         explainer,shap_values,X_val_to_ret
     """
@@ -816,7 +817,7 @@ def run_create_submission(path_for_merged, path_data_cleaned,batch_size_for_trai
     if not create_submission:
 
         
-        val_monthes=[33]
+        val_monthes=[test_month-1]
 
         print('validation started...')
         
@@ -849,6 +850,9 @@ if __name__ == '__main__':
 
 
     parser = argparse.ArgumentParser()
+
+    parser.add_argument('--test_month', type=int, help='month to create submission on')
+
     parser.add_argument('--run_name', type=str)
     parser.add_argument('--path_for_merged', type=str,help='folder where merged.csv stored after prepare_data.py. Also best hyperparameters  stored in this folder')
     parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
@@ -858,11 +862,15 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    minio_user=os.environ.get("MINIO_ACCESS_KEY")
+    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
+    bucket_name = os.environ.get("BUCKET_NAME")
 
-    ACCESS_KEY = 'airflow_user'
-    SECRET_KEY = 'airflow_paswword'
+
+    ACCESS_KEY = minio_user
+    SECRET_KEY = minio_password
     host = 'http://minio:9000'
-    bucket_name = 'mlflow'
+    bucket_name = bucket_name
 
     s3c = boto3.resource('s3', 
                     aws_access_key_id=ACCESS_KEY,
@@ -885,7 +893,7 @@ if __name__ == '__main__':
 
     exp = get_or_create_experiment('create_submission')
 
-    explainer, shaps, X_display = run_create_submission(args.path_for_merged, args.path_data_cleaned,args.batch_size_for_train)
+    explainer, shaps, X_display = run_create_submission(args.path_for_merged, args.path_data_cleaned,args.batch_size_for_train, args.test_month)
 
     shap.plots.beeswarm(shaps, max_display=20,show=False)
     plt.title('SHAPs * 100')

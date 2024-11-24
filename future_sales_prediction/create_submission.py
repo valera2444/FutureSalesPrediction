@@ -783,7 +783,7 @@ def validate_ML(params,batch_size,val_monthes, shop_item_pairs_in_dbn, shop_item
 
     return val_errors, val_preds, val_true
 
-def create_submission(model, columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path):
+def create_submission(model, columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path,test_month):
     """
     Generates predictions for the test dataset and prepares a submission file.
     
@@ -796,10 +796,11 @@ def create_submission(model, columns_order, shop_item_pairs_in_dbn,batch_size_to
         batch_size_to_read (int): chunck size when reading csv file. This prevents memory error when using multiple processes
         source_path (str): root path for data
         cleaned_path (str): path to folder where data saved after etl
+        test_month (int)
     Returns:
         pd.DataFrame: Submission-ready DataFrame containing predictions.
     """
-    val_month = 34
+    val_month = test_month
     test = pd.read_csv(f'{cleaned_path}/test.csv')
     
     data_test = test
@@ -856,7 +857,7 @@ def create_submission(model, columns_order, shop_item_pairs_in_dbn,batch_size_to
     data_test = data_test.merge(PREDICTION,on=['shop_id','item_id'])[['ID','item_cnt_month']]
     return data_test
 
-def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,batches_for_training,source_path,cleaned_path):
+def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,batches_for_training,source_path,cleaned_path, test_month):
     """
     Pipeline for both training model and creating submission
     Note: batch learning works properly only for LGBMRegressor. Using another model with batch_size<=len(shop_item_pairs_WITH_PREV_in_dbn[dbn]) will lead to incorrect results
@@ -870,6 +871,7 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
         batches_for_training (int): number of batches to train on. These parameter may be extremelly usefull for models which doesnt support batch learning. Also this may be usefull for reducing train time
         source_path (str): root path for data
         cleaned_path (str): path to folder where data saved after etl
+        test_month (int)
     Returns:
         pd.DataFrame: Submission-ready DataFrame containing predictions.
     """
@@ -879,7 +881,7 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
 
     #print(f'model training on 34 started')
     t1 = time.time()
-    model,columns_order = train_model(model,batch_size, 34, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training,None,source_path)
+    model,columns_order = train_model(model,batch_size, test_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read, batches_for_training,None,source_path)
     t2 = time.time()
     print('training model time,',t2-t1)
     print('Feature importnaces in lgb:')
@@ -888,7 +890,7 @@ def create_submission_pipeline(merged, model,batch_size,shop_item_pairs_in_dbn, 
     #print('n_estimators:', model.n_estimators_)
     #print('submission creation started')
     t1 = time.time()
-    data_test = create_submission(model,columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path)
+    data_test = create_submission(model,columns_order, shop_item_pairs_in_dbn,batch_size_to_read,source_path,cleaned_path, test_month)
     t2 = time.time()
     print('submission creation time,', t2-t1)
 
@@ -936,7 +938,7 @@ def get_or_create_experiment(experiment_name):
     else:
         return mlflow.create_experiment(experiment_name)
     
-def run_create_submission(path_for_merged, path_data_cleaned, is_create_submission,experiment_id,batch_size_for_train):
+def run_create_submission(path_for_merged, path_data_cleaned, is_create_submission,experiment_id,batch_size_for_train, test_month, batches_for_train):
     """
     Function for expanding window validation or creating submission. Reads hyperparameters from saved_dictionary.pkl and writes submission in the root
     If used for expanding window validation, writes predictions and target for further error analysis
@@ -945,6 +947,8 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
         path_data_cleaned (str): path to the folder where created by etl.py file stored
         is_create_submission (bool): whether to infer model with sliding winfow validation or create submission
         batch_size_for_train(int): 
+        test_month (int):
+        batches_for_train (int): 
     Returns:
         - object: fitted model (if create submission)
     """
@@ -954,7 +958,7 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
 
     data_train = pd.read_csv(f'{path_data_cleaned}/data_train.csv')
     test = pd.read_csv(f'{path_data_cleaned}/test.csv')
-    test['date_block_num'] = 34
+    test['date_block_num'] = test_month
     data_train = pd.concat([data_train,test ], ignore_index=True).drop('ID', axis=1).fillna(0)
 
 
@@ -967,7 +971,7 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
 
     #using batches_for_training > 1 doesnt improve metrics much
 
-    batches_for_training=1
+    batches_for_training=batches_for_train
 
     batch_size=batch_size_for_train
     
@@ -985,7 +989,7 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
     if not create_submission:
 
         
-        val_monthes=range(22,34)
+        val_monthes=range(test_month-12,test_month)
 
         print('validation started...')
         
@@ -1011,6 +1015,7 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
                                             experiment_id=experiment_id
         )
         
+        mlflow.log_metric('rmse', np.mean(val_errors))
         np.save(f'{path_for_merged}/val_errors.npy', np.array(val_errors,dtype=object))
         np.save(f'{path_for_merged}/val_preds.npy', np.array(val_preds,dtype=object))
         np.save(f'{path_for_merged}/val_true.npy', np.array(val_true,dtype=object))
@@ -1031,7 +1036,8 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
                                             batch_size_to_read=batch_size_to_read,
                                             batches_for_training=batches_for_training,
                                             source_path=path_for_merged,
-                                            cleaned_path=path_data_cleaned
+                                            cleaned_path=path_data_cleaned,
+                                            test_month=test_month
                                             )
         submission.to_csv('submission.csv', index=False)
         print(submission.describe())
@@ -1050,14 +1056,20 @@ if __name__ == '__main__':
     parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
     parser.add_argument('--is_create_submission', type=int, help='0 if false else 1')
     parser.add_argument('--batch_size_for_train', type=int, help='batch size for model training')
+    parser.add_argument('--test_month', type=int, help='month to create submission on')
+    parser.add_argument('--batches_for_train', type=int, help='number of batches to train on')
 
     args = parser.parse_args()
 
+    minio_user=os.environ.get("MINIO_ACCESS_KEY")
+    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
+    bucket_name = os.environ.get("BUCKET_NAME")
 
-    ACCESS_KEY = 'airflow_user'
-    SECRET_KEY = 'airflow_paswword'
+
+    ACCESS_KEY = minio_user
+    SECRET_KEY = minio_password
     host = 'http://minio:9000'
-    bucket_name = 'mlflow'
+    bucket_name = bucket_name
 
     s3c = boto3.resource('s3', 
                     aws_access_key_id=ACCESS_KEY,
@@ -1081,7 +1093,13 @@ if __name__ == '__main__':
     exp = get_or_create_experiment('create_submission')
 
     with mlflow.start_run(experiment_id=exp, run_name=args.run_name):
-        model=run_create_submission(args.path_for_merged, args.path_data_cleaned, args.is_create_submission,experiment_id=exp,batch_size_for_train=args.batch_size_for_train)
+        model=run_create_submission(args.path_for_merged, 
+                                    args.path_data_cleaned, 
+                                    args.is_create_submission,
+                                    experiment_id=exp,
+                                    batch_size_for_train=args.batch_size_for_train,
+                                    test_month=args.test_month,
+                                    batches_for_train=args.batches_for_train)
         if  args.is_create_submission:
             mlflow.lightgbm.log_model(model, artifact_path=f'{args.run_name}/LGBM_model_1')
 
