@@ -8,7 +8,6 @@ Future sales prediction for the cartesian product of known shops and items for t
 ## Start servers
 Steps for running all servers locally:
 1) Create .env file with variables same as in env_example.txt
-2) Run `docker compose build`
 3) Run `docker compose up airflow-init`
 4) Run `docker compose up`
 5) Create folder with the name you want in s3 bucket from your .enf file
