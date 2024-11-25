@@ -4,64 +4,51 @@
 
 Future sales prediction for the cartesian product of known shops and items for the next month. Project provides opportunity to run full pipeline from raw data to the final predictions.
 
-## Dependencies
 
-`requirements.txt` gives the default packages required.
+## Start servers
+Steps for running all servers locally:
+1) Create .env file with variables same as in env_example.txt
+2) Run `docker compose build`
+3) Run `docker compose up airflow-init`
+4) Run `docker compose up`
+5) Create folder with the name you want in s3 bucket from your .enf file
+6) Create folder with the name "data" inside the folder you have just created and load raw .csv files from kaggle in data folder
 
-Main dependencies are:
+Once you have performed all this actions, the next servers will start up:
+1) airflow (locallhost:8080)
+2) mlflow (locallhost:5000)
+3) minio (locallhost:9001)
 
-- Python3.12
-- numpy, `pip install numpy`
-- pandas, `pip install pandas`
-- scikit-learn, `pip install scikit-learn`
-- lightgbm, `pip install lightgbm`
-- optuna `pip install optuna`
+## Airflow
+You can run your dag manually any time you want after all necessary data have been loaded. When running DAG, you must specify several parameters:
+1) `trials` - number of iterations for optuna hyperparameter optimization.
+2) `run_name` - pipeline identifier, must be the same as you have chosen in 5) from start servers section
+3) `lr_range_optuna` - learning rate range for optuna
+4) `max_num_leaves_range_optuna` - maximum number of leaves in one tree for optuna
+5) `num_estimators_range_optuna` - number of trees for optuna
+6) `batch_size_for_train` - batch size for training
+7) `test_month` - date block number of month from test.csv
+8) `batches_for_train` - number of bacthes to train on during submission creation and validation on 12 monthes. Not used during hyperparameter optimization
 
-> **Note**: Dependencies must be installed manually or via requirements.txt. 
+Preferred parameters for systems with RAM capacity >= 10GB are:. 
+1) lr_range_optuna: 0.0001 0.1
+2) max_num_leaves_range_optuna: 32 256
+3) num_estimators_range_optuna: 100 600
+4) batch_size_for_train: 3_000_000
+5) batches_for_train: 3
+6) trials: this hyperparameter influence on hyperparameter execution time.
+ > **Note**: Whole pipilene execution time strongly depends on number of avaliable cores as lightgbm and batch preparation use multiprocessing. 
 
-## Install
+## MLFlow
+This service is responsible for experiment tracking. You may see hyperparameter optimization processes details under hyperparameter_optimization experiment and run name that you have chosen previously.
 
-- from [Test PyPI](https://test.pypi.org/project/predict-future-sales)
+You can also find results of 12 month validation here under create_submission experiment.
 
+## Minio
+This service is a data storage which is used both as backup storage and artifact storage. 
 
-## Run
-
-Example usage:
-
-```python
-from future_sales_prediction import etl, prepare_data, create_submission, hyperparameters_tuning
-
-data_source = 'data'
-data_etl_writes_to = 'data/cleaned'
-data_prepare_data_writes_to = 'data'
-
-etl.run_etl(data_source,data_etl_writes_to)
-
-prepare_data.run_prepare_data(data_etl_writes_to,data_prepare_data_writes_to)
-
-params = hyperparameters_tuning.run_optimizing(data_prepare_data_writes_to, data_etl_writes_to, n_trials=2)
-
-create_submission.run_create_submission(data_prepare_data_writes_to, data_etl_writes_to, params)
-```
-Here user-defined parameters are:
-- Directory with source data and directories for storing temporary data.
-- Number of trials for hyperparameter optimization. Note, that one trial takes around 20 minutes.
-
-## Extract-transform-load `(etl.py)`
-This part handles inconsistent data
-
-## Feature creation `(prepare_data.py)`
-This stage creates data for training and inference. After running this stage we will have large .csv file, with rows representing (shop, item) pairs and columns representing:
-- **Monthly Features**: Columns related to the month-specific characteristics of each (shop, item) pair. These features are tagged with a date suffix in the format `{feature_name}$dbn`, where `dbn` is the `date_block_num` (e.g., `ema_item_category_id$10`).
-- **Static Features**: Columns that are constant over time, such as static attributes of shops or items.
-> **Note**: Auxillary csv files created during running this stage in a folder defined by user. 
-
-
-## Data final preparations, model training and submission creation `(create_submission.py)`:
-This stage:
-1) Runs final data preparation to make data suitable for model fitting and inferece. Feature selection step takes place on this stage.
-2) Trains model and creates submission. Submission is written into submission.csv in a root directory. 
-
-## Hyperparameter tuning `(hyperparameter_tuning.py)`:
-This stage:
-1) Is very similar to the previous one, but additionally iterates over hyperparameter space searching for the best hyperparameters.
+Root path for each pipeline run is s3://bucket_name/run_name. After pipeline execution, there will be few folders and files:
+1) `best_parameters.pkl`: serialized dictionary with best hyperparamers after running optuna.
+2) `data`: folder, that contains all data used during pipeline execution.
+3) `images`: folder, that contains plots of model interpretability and error analysis sections.
+4) `submission.csv`: predictions for test month.
