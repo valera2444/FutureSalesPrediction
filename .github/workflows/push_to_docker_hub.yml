@@ -27,7 +27,7 @@ jobs:
         with:
           file: ./Dockerfile
           push: true
-          tags: valeriy459/py_mlflow_server:latest
+          tags: valeriy459/airflow-extended-image:latest
 
       -
         name: Build and push mlflow
@@ -35,4 +35,4 @@ jobs:
         with:
           file: ./Dockerfile.mlflow
           push: true
-          tags: valeriy459/airflow-extended-image:latest
+          tags: valeriy459/py_mlflow_server:latest
