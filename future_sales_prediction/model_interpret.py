@@ -897,11 +897,13 @@ if __name__ == '__main__':
 
     shap.plots.beeswarm(shaps, max_display=20,show=False)
     plt.title('SHAPs * 100')
-    plt.savefig('shaps_beeswarm.png')
+    plt.savefig('shaps_beeswarm.png',bbox_inches='tight')
+    plt.close()
     s3c.upload_file('shaps_beeswarm.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_beeswarm.png')
 
     shap.plots.bar(shaps * 100, max_display=20,show=False)
-    plt.savefig('shaps_bar.png')
+    plt.savefig('shaps_bar.png',bbox_inches='tight')
+    plt.close()
     s3c.upload_file('shaps_bar.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_bar.png')
 
 
