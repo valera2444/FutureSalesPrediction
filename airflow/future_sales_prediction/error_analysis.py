@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import argparse
 import boto3
 import os
+import mlflow
 
 mapping = {
     0: [[0, 12, 24], 'January'],
@@ -57,6 +58,9 @@ args = read_args()
 minio_user=os.environ.get("MINIO_ACCESS_KEY")
 minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
 bucket_name = os.environ.get("BUCKET_NAME")
+
+mlflow.set_tracking_uri(uri="http://mlflow:5000")
+run_id = mlflow.search_runs(experiment_names=['create_submission'],filter_string=f"run_name='{args.run_name}'").iloc[0]['run_id']
 
 def download_files(args):
 
@@ -209,7 +213,8 @@ plt.xlabel('Sales')
 plt.xlabel('date block num')
 
 plt.savefig('sales_preds_per_dbn.png')
-s3c.upload_file('sales_preds_per_dbn.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/sales_preds_per_dbn.png')
+mlflow.log_artifact(local_path='sales_preds_per_dbn.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('sales_preds_per_dbn.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/sales_preds_per_dbn.png')
 
 
 
@@ -232,7 +237,8 @@ ax[2].tick_params(axis='x', labelrotation=90,labelsize=7)
 ax[2].set_title('SMAPE error for dbn_diff');
 
 fig.savefig('mean_sales_errors_per_dbn_diff.png')
-s3c.upload_file('mean_sales_errors_per_dbn_diff.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_dbn_diff.png')
+mlflow.log_artifact(local_path='mean_sales_errors_per_dbn_diff.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('mean_sales_errors_per_dbn_diff.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_dbn_diff.png')
 
 
 
@@ -253,7 +259,8 @@ ax[2].tick_params(axis='x', labelrotation=90)
 ax[2].set_title('SMAPE error for date_block_num');
 
 fig.savefig('mean_sales_errors_per_date_block_num.png')
-s3c.upload_file('mean_sales_errors_per_date_block_num.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_date_block_num.png')
+mlflow.log_artifact(local_path='mean_sales_errors_per_date_block_num.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('mean_sales_errors_per_date_block_num.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_date_block_num.png')
 
 
 
@@ -275,7 +282,8 @@ ax[2].tick_params(axis='x', labelrotation=90)
 ax[2].set_title('SMAPE error for super_category');
 
 fig.savefig('mean_sales_errors_per_super_category.png')
-s3c.upload_file('mean_sales_errors_per_super_category.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_super_category.png')
+mlflow.log_artifact(local_path='mean_sales_errors_per_super_category.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('mean_sales_errors_per_super_category.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_super_category.png')
 
 
 
@@ -293,7 +301,8 @@ ax[2].tick_params(axis='x', labelrotation=90)
 ax[2].set_title('SMAPE error for city');
 
 fig.savefig('mean_sales_errors_per_city.png')
-s3c.upload_file('mean_sales_errors_per_city.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_city.png')
+mlflow.log_artifact(local_path='mean_sales_errors_per_city.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('mean_sales_errors_per_city.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/mean_sales_errors_per_city.png')
 
 
 
@@ -314,7 +323,8 @@ ax[1].set_title('MAE error for different sales')
 ax[2].tick_params(axis='x', labelrotation=90)
 ax[2].set_title('SMAPE error for different sales');
 fig.savefig('hist_n_errors_per_dbn_diff.png')
-s3c.upload_file('hist_n_errors_per_dbn_diff.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/hist_n_errors_per_dbn_diff.png')
+mlflow.log_artifact(local_path='hist_n_errors_per_dbn_diff.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('hist_n_errors_per_dbn_diff.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/hist_n_errors_per_dbn_diff.png')
 #SMAPE is undefined in 0
 
 
@@ -327,7 +337,8 @@ plt.xlabel('count')
 plt.ylabel('sales')
 plt.title('Histogram of sales with error > 5')
 plt.savefig('histogram_of sales_with_error > 5.png')
-s3c.upload_file('histogram_of sales_with_error > 5.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/histogram_of sales_with_error > 5.png')
+mlflow.log_artifact(local_path='histogram_of sales_with_error > 5.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('histogram_of sales_with_error > 5.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/histogram_of sales_with_error > 5.png')
 
 
 
@@ -338,7 +349,8 @@ plt.xlabel('count')
 plt.ylabel('sales')
 plt.title('Histogram of sales with error < -5')
 plt.savefig('histogram_of_sales_with_error < -5.png')
-s3c.upload_file('histogram_of_sales_with_error < -5.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/histogram_of_sales_with_error < -5.png')
+mlflow.log_artifact(local_path='histogram_of_sales_with_error < -5.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('histogram_of_sales_with_error < -5.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/histogram_of_sales_with_error < -5.png')
 
 
 
@@ -348,7 +360,8 @@ plt.violinplot(df_large_errors['diff']);
 plt.ylabel('diff')
 plt.title('violinplot of sales with MAE > 10')
 plt.savefig('violinplot of sales with MAE > 10.png')
-s3c.upload_file('histogram_of_sales_with_error < -5.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/histogram_of_sales_with_error < -5.png')
+mlflow.log_artifact(local_path='violinplot of sales with MAE > 10.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('histogram_of_sales_with_error < -5.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/histogram_of_sales_with_error < -5.png')
 
 
 
@@ -361,7 +374,8 @@ ax[1].hist(df_large_errors.dbn_diff, bins=400);
 ax[1].set_xlabel('Monthes since first sale')
 ax[1].set_title('Distribution of date block num difference in data with MAE > 19')
 plt.savefig('distributions_of_dbns.png')
-s3c.upload_file('distributions_of_dbns.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/distributions_of_dbns.png')
+mlflow.log_artifact(local_path='distributions_of_dbns.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('distributions_of_dbns.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/distributions_of_dbns.png')
 
 
 
@@ -390,4 +404,5 @@ sns.lineplot(df_selected_shop4[['date_block_num','preds']], x='date_block_num',y
 ax[1,1].set_title("РостовНаДону ТЦ \"Мега\"")
 
 fig.savefig('large_errors_far_after_entering_market')
-s3c.upload_file('large_errors_far_after_entering_market.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/large_errors_far_after_entering_market.png')
+mlflow.log_artifact(local_path='large_errors_far_after_entering_market.png', artifact_path= f'{args.path_artifact_storage}/err_analysis', run_id=run_id) 
+#s3c.upload_file('large_errors_far_after_entering_market.png', bucket_name, f'{args.path_artifact_storage}/err_analysis/large_errors_far_after_entering_market.png')

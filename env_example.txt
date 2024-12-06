@@ -12,3 +12,4 @@ AIRFLOW_USER=airflow_user
 AIRFLOW_PASSWORD=airflow_password
 
 BUCKET_NAME=predict-future-sales
+AIRFLOW_PROJ_DIR=./airflow

@@ -428,22 +428,21 @@ if __name__ == '__main__':
     
     mlflow.set_tracking_uri(uri="http://mlflow:5000")
 
-    exp = get_or_create_experiment('create_submission')
-
     explainer, shaps, X_display = run_create_submission(args.path_for_merged, args.path_data_cleaned,args.batch_size_for_train, args.test_month)
+
+    run_id = mlflow.search_runs(experiment_names=['create_submission'],filter_string=f"run_name='{args.run_name}'").iloc[0]['run_id']
 
     shap.plots.beeswarm(shaps, max_display=20,show=False)
     plt.title('SHAPs')
     plt.savefig('shaps_beeswarm.png',bbox_inches='tight')
     plt.close()
-    s3c.upload_file('shaps_beeswarm.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_beeswarm.png')
+    print('Run id to save plots:', run_id)
+    mlflow.log_artifact(local_path='shaps_beeswarm.png', artifact_path= f'{args.path_artifact_storage}/shaps', run_id=run_id) 
+    #s3c.upload_file('shaps_beeswarm.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_beeswarm.png')
 
     shap.plots.bar(shaps * 100, max_display=20,show=False)
     plt.savefig('shaps_bar.png',bbox_inches='tight')
+    mlflow.log_artifact(local_path='shaps_bar.png', artifact_path= f'{args.path_artifact_storage}/shaps', run_id=run_id) 
+
     plt.close()
-    s3c.upload_file('shaps_bar.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_bar.png')
-
-
-
-
     s3c.close()
