@@ -25,7 +25,7 @@ jobs:
         name: Build and push airflow
         uses: docker/build-push-action@v6
         with:
-          file: ./Dockerfile
+          file: ./airflow/Dockerfile
           push: true
           tags: valeriy459/airflow-extended-image:latest
 
@@ -33,6 +33,14 @@ jobs:
         name: Build and push mlflow
         uses: docker/build-push-action@v6
         with:
-          file: ./Dockerfile.mlflow
+          file: ./airflow/Dockerfile.mlflow
           push: true
           tags: valeriy459/py_mlflow_server:latest
+
+      -
+        name: Build and push fastAPU
+        uses: docker/build-push-action@v6
+        with:
+          file: ./fastAPI/Dockerfile
+          push: true
+          tags: valeriy459/fastAPI:latest

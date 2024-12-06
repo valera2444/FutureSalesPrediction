@@ -31,7 +31,7 @@ def run_pipeline():
     batch_size_for_train = "{{params['batch_size_for_train']}} "
     test_month = "{{params['test_month']}} "
     batches_for_train= "{{params['batches_for_train']}} "
-
+    """
     t1 = BashOperator(
         task_id="etl",
         bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/etl.py "  + f"--run_name {run_name} --source_path {data_path} --destination_path {data_cleaned_path}"
@@ -59,12 +59,13 @@ def run_pipeline():
         bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/create_submission.py " + \
             f"--run_name {run_name} --path_for_merged {data_path} --path_data_cleaned  {data_cleaned_path} --is_create_submission 0 --batch_size_for_train {batch_size_for_train} --test_month {test_month} --batches_for_train {batches_for_train}"
     )
+    """
     t5 = BashOperator(
         task_id="create_submission",
         bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/create_submission.py " + \
             f"--run_name {run_name} --path_for_merged {data_path} --path_data_cleaned  {data_cleaned_path} --is_create_submission 1 --batch_size_for_train {batch_size_for_train} --test_month {test_month} --batches_for_train {batches_for_train}"
     )
-
+    """
     t6 = BashOperator(
         task_id="error_analysis",
         bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/error_analysis.py " +  \
@@ -77,7 +78,8 @@ def run_pipeline():
         bash_command="python3.12 ${AIRFLOW_HOME}/future_sales_prediction/model_interpret.py " + \
             f"--run_name {run_name} --path_for_merged {data_path} --path_data_cleaned {data_cleaned_path} --path_artifact_storage {images_storage_path} --batch_size_for_train {batch_size_for_train} --test_month {test_month}"
     )
-
-    chain(t1, t2, t3, t4, t5, t6, t7)
+    """
+    #chain(t1, t2, t3, t4, t5, t6, t7)
+    chain(t5)
 
 run_pipeline()

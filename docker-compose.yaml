@@ -49,8 +49,8 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider packages you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  image: valeriy459/airflow-extended-image
-  #build: .
+  #image: valeriy459/airflow-extended-image
+  build: ${AIRFLOW_PROJ_DIR}
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -95,7 +95,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ${AIRFLOW_PROJ_DIR}/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
       interval: 10s
@@ -360,6 +360,15 @@ services:
         condition: service_started
       minio-setup:
         condition: service_started
+
+  fastAPI:
+    image: valeriy459/fastAPI
+    ports:
+      - "5050:5050"
+    environment:
+      - AWS_ACCESS_KEY_ID=${MINIO_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_SECRET_ACCESS_KEY}
+      - BUCKET_NAME=${BUCKET_NAME}
 
 
 
