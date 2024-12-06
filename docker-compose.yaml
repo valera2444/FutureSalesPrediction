@@ -50,7 +50,9 @@ x-airflow-common:
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
   #image: valeriy459/airflow-extended-image
-  build: ${AIRFLOW_PROJ_DIR}
+  build:
+    context: ${AIRFLOW_PROJ_DIR}
+    
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -336,10 +338,10 @@ services:
 
   mlflow:
     restart: always
-    #build:
-    #    context: .
-    #    dockerfile: ./Dockerfile.mlflow
-    image: valeriy459/py_mlflow_server
+    build:
+        context: ${AIRFLOW_PROJ_DIR}
+        dockerfile: ./Dockerfile.mlflow
+    #image: valeriy459/py_mlflow_server
     #container_name: mlflow_server
     ports:
       - "5000:5000"
@@ -361,8 +363,11 @@ services:
       minio-setup:
         condition: service_started
 
-  fastAPI:
-    image: valeriy459/fastAPI
+  fastapi:
+    #image: valeriy459/fastAPI
+    build:
+        context: ./fastAPI
+        dockerfile: ./Dockerfile
     ports:
       - "5050:5050"
     environment:

@@ -20,7 +20,7 @@ def download_from_minio(args):
     
     ACCESS_KEY = minio_user
     SECRET_KEY =  minio_password
-    host = 'http://localhost:9000'
+    host = 'http://minio:9000'
     bucket_name = bucket_name
 
     s3c = boto3.resource('s3', 
