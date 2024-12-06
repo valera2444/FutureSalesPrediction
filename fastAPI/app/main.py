@@ -13,8 +13,44 @@ from utils import select_columns_for_reading, prepare_data_validation_boosting, 
 
 from download_data import download_from_minio
 
+from fastapi import FastAPI
 
-app = FastAPI()
+description = """
+Endpoint for model online inference after all airflow job done. 
+
+## download_data
+
+This enables to download data for specific run to the server
+
+## predict
+
+Function for online inference.
+Returns predicted sales in [0,20] range for passed item and shop id.
+If data after etl doesnt contain one of them, application exists with error.
+Batch size used not to read whole merged.csv into RAM because memory error posiible. The less batch size - the more inference time
+"""
+
+tags_metadata = [
+    {
+        "name": "predict",
+        "description": "Makes prediction on shop, item pair",
+    },
+    {
+        "name": "download_data",
+        "description": "Downloads data from specified run_name to server",
+        
+    }
+]
+
+
+app = FastAPI(
+    title="Predict-future-sales",
+    description=description,
+    summary="Online inference endpoint",
+    openapi_tags=tags_metadata
+)
+
+
 
 
 class SampleParams(BaseModel):
@@ -52,7 +88,7 @@ def prepare_row(args):
     
     return X_val
 
-@app.get('/download_data/')
+@app.get('/download_data/', tags=["download_data"])
 async def download_data(params: Annotated[DataDownloadParams, Query()]):
     args = Args({'run_name':params.run_name,
             'path_for_merged':f'{params.run_name}/data',
@@ -63,7 +99,7 @@ async def download_data(params: Annotated[DataDownloadParams, Query()]):
     return "Data downloaded successfully"
 
 
-@app.get("/predict/")
+@app.get("/predict/", tags=["predict"])
 async def create_prediction(sample: Annotated[SampleParams, Query()]):
 
     args = Args({'run_name':sample.run_name,
