@@ -13,7 +13,7 @@ def match(merged, row,new_row,  test_month, check):
         row (pd.Dataframe): row with shop-item specific olumns (item, shop, category, super_category, city)
         new_row (pd.Dataframe): iteratively fiiled raw
         test_month ():
-        check ():
+        check (dict): item and shop as keys and shop-item specific columns (item_id, shop_id, category, super_category, city) as values
     Returns:
         pd.Dataframe: dataframe with 1 row with collected statistics
     """
@@ -156,6 +156,15 @@ def create_big_5(partial_merged, shop_id, item_id):
     return shop_city_pairs[['shop_id','item_id','item_category_id','city','super_category']]
 
 def create_5_plus_match(args):
+    """
+    Runs pipeline for row preaparation in format as merged.csv
+
+    Args:
+        args (object): Object of custom class with required fields
+
+    Returns:
+        pd.DataFrame: row as in merged.csv
+    """
     shop_id = args.shop_id
     item_id = args.item_id
 
@@ -188,49 +197,3 @@ def create_5_plus_match(args):
 
     #print(new_row.isna())
     return new_row
-
-if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--run_name', type=str)
-    parser.add_argument('--path_for_merged', type=str, help='folder where merged.csv stored after prepare_data.py. Also best hyperparams will be stored here')
-    parser.add_argument('--path_data_cleaned', type=str, help='folder where data stored after etl')
-    parser.add_argument('--test_month', type=int, help='month to create submission on')
-    parser.add_argument('--item_id', type=int)
-    parser.add_argument('--shop_id', type=int)
-    parser.add_argument('--batch_size', type=int)
-
-    args = parser.parse_args()
-
-    minio_user=os.environ.get("MINIO_ACCESS_KEY")
-    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
-    bucket_name = os.environ.get("BUCKET_NAME")
-    
-    ACCESS_KEY = minio_user
-    SECRET_KEY =  minio_password
-    host = 'http://localhost:9000'
-    bucket_name = bucket_name
-
-    s3c = boto3.resource('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host) 
-    
-    #download_s3_folder(s3c,bucket_name,args.path_data_cleaned, args.path_data_cleaned) # this must be used only once on server part 
-
-    s3c = boto3.client('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
-    
-    
-
-    #s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') # ASSUMES THAT path args.path_for_merged exists +  this must be used only once on server part 
-
-
-    
-    pd.options.display.max_columns = 999
-    row = create_5_plus_match(args)
-    print(row)
-    

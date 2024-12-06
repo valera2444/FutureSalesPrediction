@@ -3,49 +3,27 @@ from typing import Annotated, Literal
 
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
-from sample_cascade_match import create_5_plus_match, download_s3_folder
+from create_row_in_req_format import create_5_plus_match
 import os, boto3
 import pickle
 import numpy as np
 #import pandas as pd
+
 from utils import select_columns_for_reading, prepare_data_validation_boosting, make_X_lag_format, append_some_columns
+
+from download_data import download_from_minio
+
+
 app = FastAPI()
 
 
-def download_from_minio(args):
-
-    minio_user=os.environ.get("MINIO_ACCESS_KEY")
-    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
-    bucket_name = os.environ.get("BUCKET_NAME")
-    
-    ACCESS_KEY = minio_user
-    SECRET_KEY =  minio_password
-    host = 'http://minio:9000'
-    bucket_name = bucket_name
-
-    s3c = boto3.resource('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host) 
-    
-    download_s3_folder(s3c,bucket_name,args.path_data_cleaned, args.path_data_cleaned) # this must be used only once on server part 
-
-    s3c = boto3.client('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
-    
-    
-
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') # ASSUMES THAT path args.path_for_merged exists +  this must be used only once on server part 
-    
-    s3c.download_file(bucket_name, f'{args.run_name}/lgbm.pkl', f'lgbm.pkl')
-
-class Sample(BaseModel):
+class SampleParams(BaseModel):
     item_id: int
     shop_id: int
-    download:bool = False
     batch_size:int
+    run_name: str
+
+class DataDownloadParams(BaseModel):
     run_name: str
 
 class Args:
@@ -53,22 +31,7 @@ class Args:
         for el in d.keys():
             setattr(self, el, d[el])
 
-@app.get("/predict/")
-async def create_prediction(sample: Annotated[Sample, Query()]):
-
-    args = Args({'run_name':sample.run_name,
-            'path_for_merged':f'{sample.run_name}/data',
-            'path_data_cleaned':f'{sample.run_name}/data/cleaned',
-            'test_month':34,
-            'item_id':sample.item_id,
-            'shop_id':sample.shop_id,
-            'batch_size':sample.batch_size})
-    if sample.download:
-        download_from_minio(args)
-    
-    model_filename='lgbm.pkl'
-    with open(model_filename, "rb") as file:
-        loaded_model = pickle.load(file)
+def prepare_row(args):
 
     row = create_5_plus_match(args)
 
@@ -86,10 +49,40 @@ async def create_prediction(sample: Annotated[Sample, Query()]):
     X_val = make_X_lag_format(X_val, args.test_month)
 
     X_val = append_some_columns(X_val, args.test_month )
+    
+    return X_val
 
-    print(loaded_model.feature_names_in_)
-    print(X_val.columns)
-    prediction = loaded_model.predict(X_val, validate_features=True)
+@app.get('/download_data/')
+async def download_data(params: Annotated[DataDownloadParams, Query()]):
+    args = Args({'run_name':params.run_name,
+            'path_for_merged':f'{params.run_name}/data',
+            'path_data_cleaned':f'{params.run_name}/data/cleaned'})
+    
+    download_from_minio(args)
 
-    print(np.clip(prediction[0],0,20))
+    return "Data downloaded successfully"
+
+
+@app.get("/predict/")
+async def create_prediction(sample: Annotated[SampleParams, Query()]):
+
+    args = Args({'run_name':sample.run_name,
+            'path_for_merged':f'{sample.run_name}/data',
+            'path_data_cleaned':f'{sample.run_name}/data/cleaned',
+            'test_month':34,
+            'item_id':sample.item_id,
+            'shop_id':sample.shop_id,
+            'batch_size':sample.batch_size})
+    
+    
+    model_filename='lgbm.pkl'
+
+    with open(model_filename, "rb") as file:
+        loaded_model = pickle.load(file)
+
+    row = prepare_row(args)
+
+    prediction = loaded_model.predict(row, validate_features=True)
+
+
     return f"Prediction for shop {args.shop_id} item {args.item_id} is {np.clip(prediction[0],0,20)}"
