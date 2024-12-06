@@ -630,10 +630,14 @@ if __name__ == '__main__':
                                     test_month=args.test_month,
                                     batches_for_train=args.batches_for_train)
         if  args.is_create_submission:
+            model_filename='lgbm.pkl'
+            with open(model_filename, "wb") as file:
+                pickle.dump(model, file)
             mlflow.lightgbm.log_model(model, artifact_path=f'{args.run_name}/LGBM_model_1')
 
     if args.is_create_submission:
         s3c.upload_file('submission.csv', bucket_name, f'{args.run_name}/submission.csv')
+        s3c.upload_file('lgbm.pkl', bucket_name, f'{args.run_name}/lgbm.pkl')
     else:
         
         s3c.upload_file(f'{args.path_for_merged}/val_preds.npy', bucket_name, f'{args.path_for_merged}/val_preds.npy')
