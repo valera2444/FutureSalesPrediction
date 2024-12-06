@@ -46,4 +46,4 @@ jobs:
           context: "{{defaultContext}}:fastAPI"
           file: ./Dockerfile
           push: true
-          tags: valeriy459/fastAPI:latest
+          tags: valeriy459/fastapi:latest

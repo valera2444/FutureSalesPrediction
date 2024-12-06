@@ -49,9 +49,9 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider packages you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  #image: valeriy459/airflow-extended-image
-  build:
-    context: ${AIRFLOW_PROJ_DIR}
+  image: valeriy459/airflow-extended-image
+  #build:
+  #  context: ${AIRFLOW_PROJ_DIR}
     
   environment:
     &airflow-common-env
@@ -338,10 +338,10 @@ services:
 
   mlflow:
     restart: always
-    build:
-        context: ${AIRFLOW_PROJ_DIR}
-        dockerfile: ./Dockerfile.mlflow
-    #image: valeriy459/py_mlflow_server
+    #build:
+    #    context: ${AIRFLOW_PROJ_DIR}
+    #    dockerfile: ./Dockerfile.mlflow
+    image: valeriy459/py_mlflow_server
     #container_name: mlflow_server
     ports:
       - "5000:5000"
@@ -364,10 +364,10 @@ services:
         condition: service_started
 
   fastapi:
-    #image: valeriy459/fastAPI
-    build:
-        context: ./fastAPI
-        dockerfile: ./Dockerfile
+    image: valeriy459/fastapi
+    #build:
+    #    context: ./fastAPI
+    #    dockerfile: ./Dockerfile
     ports:
       - "5050:5050"
     environment:
