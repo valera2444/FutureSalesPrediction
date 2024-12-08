@@ -635,4 +635,5 @@ if __name__ == '__main__':
     run_prepare_data(args.source_path, args.destination_path, args.test_month)
 
     upload_file(args.destination_path+'/merged.csv', bucket_name)
+    upload_file(f'{args.destination_path}/item_dbn_diff.csv', bucket_name)
     
