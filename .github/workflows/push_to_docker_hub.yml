@@ -4,6 +4,7 @@ on:
   push:
     branches:
         - DS-4-Airflow
+        - DS-4-with-goolgle-cloud
 
 jobs:
   docker:

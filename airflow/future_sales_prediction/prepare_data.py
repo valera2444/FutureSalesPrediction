@@ -17,6 +17,8 @@ import mlflow
 import boto3
 import os
 
+from gcloud_operations import upload_folder, upload_file, download_file, download_folder
+
 def prepare_past_ID_s_CARTESIAN(data_train):
     """
     Prepares cartesian product of unique shop, item pairs over time blocks.
@@ -615,25 +617,6 @@ def run_prepare_data(source_path, destination_path, test_month):
     total_time2 = time.time()
     print('total data preparation time,',total_time2-total_time1)
 
-def download_s3_folder(s3c, bucket_name, s3_folder, local_dir=None):
-    """
-    Download the contents of a folder directory to local_dir (creates if not exist)
-    Args:
-        bucket_name: the name of the s3 bucket
-        s3_folder: the folder path in the s3 bucket
-        local_dir: a relative or absolute directory path in the local file system
-    """
-    bucket = s3c.Bucket(bucket_name)
-    for obj in bucket.objects.filter(Prefix=s3_folder):
-        target = obj.key if local_dir is None \
-            else os.path.join(local_dir, os.path.relpath(obj.key, s3_folder))
-        if not os.path.exists(os.path.dirname(target)):
-            os.makedirs(os.path.dirname(target))
-        if obj.key[-1] == '/':
-            continue
-        bucket.download_file(obj.key, target)
-        #print(obj.key, target)
-
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -644,31 +627,12 @@ if __name__ == '__main__':
     parser.add_argument('--destination_path', type=str, help='path where merged.csv will be stored')
     args = parser.parse_args()
 
-    minio_user=os.environ.get("MINIO_ACCESS_KEY")
-    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
-    bucket_name = os.environ.get("BUCKET_NAME")
+    bucket_name = os.environ.get('BUCKET_NAME')
     
-    ACCESS_KEY = minio_user
-    SECRET_KEY =  minio_password
-    host = 'http://minio:9000'
-    bucket_name = bucket_name
 
-    s3c = boto3.resource('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
-
-
-    download_s3_folder(s3c,bucket_name,args.source_path,args.source_path)
+    download_folder(bucket_name,args.source_path)
 
     run_prepare_data(args.source_path, args.destination_path, args.test_month)
 
-    s3c = boto3.client('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
-
-    s3c.upload_file(f'{args.destination_path}/item_dbn_diff.csv',bucket_name, f'{args.destination_path}/item_dbn_diff.csv' )#this will be used by error analysis
-    s3c.upload_file(f'{args.destination_path}/merged.csv', bucket_name, f'{args.destination_path}/merged.csv')
-
-    s3c.close()
+    upload_file(args.destination_path+'/merged.csv', bucket_name)
+    

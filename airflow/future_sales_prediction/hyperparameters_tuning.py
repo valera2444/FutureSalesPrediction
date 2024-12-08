@@ -36,6 +36,8 @@ import boto3
 SOURCE_PATH = None
 from utils import create_batch_train, create_batch_val, make_X_lag_format, append_some_columns, prepare_past_ID_s_CARTESIAN
 
+from gcloud_operations import upload_folder, upload_file, download_file, download_folder
+
 def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,batches_for_training,shop_item_pairs_in_dbn,source_path):
     """
     Trains a machine learning model with specified batches and tracks RMSE for training on current val_month.
@@ -411,7 +413,7 @@ def run_optimizing(args, experiment_id, test_month):
 
     study.optimize(objective_f, n_trials=n_trials)
 
-    with open('best_parameters.pkl', 'wb') as f:
+    with open(f'{args.run_name}/best_parameters.pkl', 'wb') as f:
         pickle.dump(study.best_params, f)
 
     return study.best_params
@@ -475,39 +477,23 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    minio_user=os.environ.get("MINIO_ACCESS_KEY")
-    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
     bucket_name = os.environ.get("BUCKET_NAME")
 
     #print(args.batch_size_for_train)
-    ACCESS_KEY = minio_user
-    SECRET_KEY = minio_password
-    host = 'http://minio:9000'
-    bucket_name = bucket_name
+    if not os.path.exists(args.path_data_cleaned):
+        download_folder(bucket_name,args.path_data_cleaned)
 
-    s3c = boto3.resource('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host) 
-    
-    download_s3_folder(s3c,bucket_name,args.path_data_cleaned, args.path_data_cleaned)
-    
-
-    s3c = boto3.client('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
-    
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') # ASSUMES THAT path args.path_for_merged exists
+    if not os.path.exists(f'{args.path_for_merged}/merged.csv'):
+        download_file(bucket_name, f'{args.path_for_merged}/merged.csv')
 
     mlflow.set_tracking_uri(uri="http://mlflow:5000")
     exp = get_or_create_experiment('hyperparameter_optimiztion')
+
+
+
 
     with mlflow.start_run(experiment_id=exp, run_name=args.run_name):
         
         bp =run_optimizing(args,exp,args.test_month)
 
-    s3c.upload_file('best_parameters.pkl', bucket_name, f'{args.run_name}/best_parameters.pkl')
-
-
-    s3c.close()
+    upload_file(f'{args.run_name}/best_parameters.pkl', bucket_name)

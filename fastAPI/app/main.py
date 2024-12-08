@@ -9,11 +9,15 @@ import pickle
 import numpy as np
 #import pandas as pd
 
+from pathlib import Path
+
+
 from utils import select_columns_for_reading, prepare_data_validation_boosting, make_X_lag_format, append_some_columns
 
-from download_data import download_from_minio
 
 from fastapi import FastAPI
+
+from gcloud_operations import download_folder, download_file, upload_file, upload_folder
 
 description = """
 Endpoint for model online inference after all airflow job done. 
@@ -94,9 +98,16 @@ async def download_data(params: Annotated[DataDownloadParams, Query()]):
             'path_for_merged':f'{params.run_name}/data',
             'path_data_cleaned':f'{params.run_name}/data/cleaned'})
     
-    download_from_minio(args)
+    bucket_name = os.environ.get("BUCKET_NAME")
 
-    return "Data downloaded successfully"
+    if not os.path.exists(f'{args.path_for_merged}/merged.csv'):
+        Path(f'{args.path_for_merged}').mkdir(parents=True, exist_ok=True)
+        download_file(bucket_name, f'{args.path_for_merged}/merged.csv')
+        download_file(bucket_name, f'{args.run_name}/lgbm.pkl')
+        return "Data downloaded successfully"
+    
+    else:
+        return "Data is already on server"
 
 
 @app.get("/predict/", tags=["predict"])
@@ -111,7 +122,7 @@ async def create_prediction(sample: Annotated[SampleParams, Query()]):
             'batch_size':sample.batch_size})
     
     
-    model_filename='lgbm.pkl'
+    model_filename=f'{args.run_name}/lgbm.pkl'
 
     with open(model_filename, "rb") as file:
         loaded_model = pickle.load(file)

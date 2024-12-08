@@ -30,6 +30,8 @@ import mlflow
 
 from utils import create_batch_train, create_batch_val, make_X_lag_format, append_some_columns, prepare_past_ID_s_CARTESIAN
 
+from gcloud_operations import upload_folder, upload_file, download_file, download_folder
+
 def train_model(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,batches_for_training,shop_item_pairs_in_dbn,source_path):
     """
     Trains a machine learning model with specified batches and tracks RMSE for training on current val_month.
@@ -505,7 +507,7 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
     batch_size=batch_size_for_train
     
 
-    with open(f'best_parameters.pkl', 'rb') as f:
+    with open(f'{args.run_name}/best_parameters.pkl', 'rb') as f:
         params = pickle.load(f)
 
     #model parameters
@@ -568,7 +570,8 @@ def run_create_submission(path_for_merged, path_data_cleaned, is_create_submissi
                                             cleaned_path=path_data_cleaned,
                                             test_month=test_month
                                             )
-        submission.to_csv('submission.csv', index=False)
+        
+        submission.to_csv(f'{args.run_name}/submission.csv', index=False)
         print(submission.describe())
 
         return model
@@ -590,32 +593,16 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    minio_user=os.environ.get("MINIO_ACCESS_KEY")
-    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
     bucket_name = os.environ.get("BUCKET_NAME")
 
 
-    ACCESS_KEY = minio_user
-    SECRET_KEY = minio_password
-    host = 'http://minio:9000'
-    bucket_name = bucket_name
-
-    s3c = boto3.resource('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
     
-    download_s3_folder(s3c,bucket_name,args.path_data_cleaned, args.path_data_cleaned)
-    
-
-    s3c = boto3.client('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
-    
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') # ASSUMES THAT path args.path_for_merged exists
-
-    s3c.download_file(bucket_name, f'{args.run_name}/best_parameters.pkl', 'best_parameters.pkl')
+    if not os.path.exists(args.path_data_cleaned):
+        download_folder(bucket_name,args.path_data_cleaned)
+    if not os.path.exists(f'{args.path_for_merged}/merged.csv'):
+        download_file(bucket_name, f'{args.path_for_merged}/merged.csv')
+    if not os.path.exists(f'{args.run_name}/best_parameters.pkl'):
+        download_file(bucket_name, f'{args.run_name}/best_parameters.pkl')
     
     mlflow.set_tracking_uri(uri="http://mlflow:5000")
 
@@ -630,17 +617,15 @@ if __name__ == '__main__':
                                     test_month=args.test_month,
                                     batches_for_train=args.batches_for_train)
         if  args.is_create_submission:
-            model_filename='lgbm.pkl'
+            model_filename=f'{args.run_name}/lgbm.pkl'
             with open(model_filename, "wb") as file:
                 pickle.dump(model, file)
             mlflow.lightgbm.log_model(model, artifact_path=f'{args.run_name}/LGBM_model_1')
 
     if args.is_create_submission:
-        s3c.upload_file('submission.csv', bucket_name, f'{args.run_name}/submission.csv')
-        s3c.upload_file('lgbm.pkl', bucket_name, f'{args.run_name}/lgbm.pkl')
+        upload_file( f'{args.run_name}/submission.csv', bucket_name)
+        upload_file(f'{args.run_name}/lgbm.pkl',bucket_name)
     else:
+        upload_file(f'{args.path_for_merged}/val_preds.npy', bucket_name)
+        upload_file(f'{args.path_for_merged}/val_true.npy', bucket_name)
         
-        s3c.upload_file(f'{args.path_for_merged}/val_preds.npy', bucket_name, f'{args.path_for_merged}/val_preds.npy')
-        s3c.upload_file(f'{args.path_for_merged}/val_true.npy', bucket_name, f'{args.path_for_merged}/val_true.npy')
-
-    s3c.close()

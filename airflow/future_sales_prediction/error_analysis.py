@@ -3,9 +3,11 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import argparse
-import boto3
+
 import os
 import mlflow
+
+from gcloud_operations import upload_folder, upload_file, download_file, download_folder
 
 mapping = {
     0: [[0, 12, 24], 'January'],
@@ -23,23 +25,6 @@ mapping = {
 }
 
 
-def download_s3_folder(s3c, bucket_name, s3_folder, local_dir=None):
-    """
-    Download the contents of a folder directory to local_dir (creates if not exist)
-    Args:
-        bucket_name: the name of the s3 bucket
-        s3_folder: the folder path in the s3 bucket
-        local_dir: a relative or absolute directory path in the local file system
-    """
-    bucket = s3c.Bucket(bucket_name)
-    for obj in bucket.objects.filter(Prefix=s3_folder):
-        target = obj.key if local_dir is None \
-            else os.path.join(local_dir, os.path.relpath(obj.key, s3_folder))
-        if not os.path.exists(os.path.dirname(target)):
-            os.makedirs(os.path.dirname(target))
-        if obj.key[-1] == '/':
-            continue
-        bucket.download_file(obj.key, target)
 
 def read_args():
     parser = argparse.ArgumentParser()
@@ -55,39 +40,23 @@ def read_args():
 
 
 args = read_args()
-minio_user=os.environ.get("MINIO_ACCESS_KEY")
-minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
 bucket_name = os.environ.get("BUCKET_NAME")
 
 mlflow.set_tracking_uri(uri="http://mlflow:5000")
 run_id = mlflow.search_runs(experiment_names=['create_submission'],filter_string=f"run_name='{args.run_name}'").iloc[0]['run_id']
 
 def download_files(args):
-
-    ACCESS_KEY = minio_user
-    SECRET_KEY = minio_password
-    host = 'http://minio:9000'
-    bucket_name_inner = bucket_name
-
-    s3c = boto3.resource('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
+    if not os.path.exists(args.path_data_cleaned):
+        download_folder(bucket_name,args.path_data_cleaned)
     
-    download_s3_folder(s3c,bucket_name_inner,args.path_data_cleaned, args.path_data_cleaned)
-
-    s3c = boto3.client('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
-    
-    
-    
-    s3c.download_file(bucket_name_inner, f'{args.path_for_merged}/item_dbn_diff.csv', f'{args.path_for_merged}/item_dbn_diff.csv') # ASSUMES THAT path args.path_for_merged exists
-    s3c.download_file(bucket_name_inner, f'{args.path_for_merged}/val_preds.npy', f'{args.path_for_merged}/val_preds.npy') # ASSUMES THAT path args.path_for_merged exists
-    s3c.download_file(bucket_name_inner, f'{args.path_for_merged}/val_true.npy',f'{args.path_for_merged}/val_true.npy') # ASSUMES THAT path args.path_for_merged exists
-    s3c.download_file(bucket_name_inner, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') 
-
+    if not os.path.exists( f'{args.path_for_merged}/item_dbn_diff.csv'):
+        download_file(bucket_name, f'{args.path_for_merged}/item_dbn_diff.csv')
+    if not os.path.exists(f'{args.path_for_merged}/val_preds.npy'):
+        download_file(bucket_name, f'{args.path_for_merged}/val_preds.npy')
+    if not os.path.exists(f'{args.path_for_merged}/val_true.npy'):
+        download_file(bucket_name, f'{args.path_for_merged}/val_true.npy')
+    if not os.path.exists(f'{args.path_for_merged}/merged.csv'):
+        download_file(bucket_name,f'{args.path_for_merged}/merged.csv')
 
 
 
@@ -184,17 +153,8 @@ def prepare_df(args):
     return df
 
 
-
-ACCESS_KEY = minio_user
-SECRET_KEY = minio_password
-host = 'http://minio:9000'
 bucket_name = bucket_name
 
-
-s3c = boto3.client('s3', 
-                aws_access_key_id=ACCESS_KEY,
-                aws_secret_access_key=SECRET_KEY,
-                endpoint_url=host)
 
 
 

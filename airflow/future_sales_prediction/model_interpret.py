@@ -31,6 +31,8 @@ import matplotlib.pyplot as plt
 
 from utils import create_batch_train, create_batch_val, make_X_lag_format, append_some_columns, prepare_past_ID_s_CARTESIAN
 
+from gcloud_operations import upload_folder, upload_file, download_file, download_folder
+
 def train_model_and_create_shaps(model, batch_size, val_month, shop_item_pairs_WITH_PREV_in_dbn,batch_size_to_read,batches_for_training,shop_item_pairs_in_dbn,source_path):
     """
     Trains a machine learning model with specified batches and tracks RMSE for training on current val_month.
@@ -341,7 +343,7 @@ def run_create_submission(path_for_merged, path_data_cleaned,batch_size_for_trai
     batch_size=batch_size_for_train
     
 
-    with open(f'best_parameters.pkl', 'rb') as f:
+    with open(f'{args.run_name}/best_parameters.pkl', 'rb') as f:
         params = pickle.load(f)
 
     #model parameters
@@ -399,32 +401,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    minio_user=os.environ.get("MINIO_ACCESS_KEY")
-    minio_password=os.environ.get("MINIO_SECRET_ACCESS_KEY")
     bucket_name = os.environ.get("BUCKET_NAME")
 
 
-    ACCESS_KEY = minio_user
-    SECRET_KEY = minio_password
-    host = 'http://minio:9000'
-    bucket_name = bucket_name
+    if not os.path.exists(args.path_data_cleaned):
+        download_folder(bucket_name,args.path_data_cleaned)
 
-    s3c = boto3.resource('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
-    
-    download_s3_folder(s3c,bucket_name,args.path_data_cleaned, args.path_data_cleaned)
-    
+    if not os.path.exists(f'{args.path_for_merged}/merged.csv'):
+        download_file(bucket_name, f'{args.path_for_merged}/merged.csv')
 
-    s3c = boto3.client('s3', 
-                    aws_access_key_id=ACCESS_KEY,
-                    aws_secret_access_key=SECRET_KEY,
-                    endpoint_url=host)
-    
-    s3c.download_file(bucket_name, f'{args.path_for_merged}/merged.csv', f'{args.path_for_merged}/merged.csv') # ASSUMES THAT path args.path_for_merged exists
-
-    s3c.download_file(bucket_name, f'{args.run_name}/best_parameters.pkl', 'best_parameters.pkl')
+    if not os.path.exists(f'{args.run_name}/best_parameters.pkl'):
+        download_file(bucket_name, f'{args.run_name}/best_parameters.pkl')
     
     mlflow.set_tracking_uri(uri="http://mlflow:5000")
 
@@ -438,11 +425,10 @@ if __name__ == '__main__':
     plt.close()
     print('Run id to save plots:', run_id)
     mlflow.log_artifact(local_path='shaps_beeswarm.png', artifact_path= f'{args.path_artifact_storage}/shaps', run_id=run_id) 
-    #s3c.upload_file('shaps_beeswarm.png', bucket_name, f'{args.path_artifact_storage}/shaps/shaps_beeswarm.png')
-
+    
     shap.plots.bar(shaps * 100, max_display=20,show=False)
     plt.savefig('shaps_bar.png',bbox_inches='tight')
     mlflow.log_artifact(local_path='shaps_bar.png', artifact_path= f'{args.path_artifact_storage}/shaps', run_id=run_id) 
 
     plt.close()
-    s3c.close()
+    
