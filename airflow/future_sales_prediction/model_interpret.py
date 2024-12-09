@@ -20,7 +20,7 @@ import time
 import pickle
 
 import shap
-import boto3
+
 import os
 
 import argparse
@@ -29,7 +29,7 @@ import mlflow
 
 import matplotlib.pyplot as plt
 
-from utils import create_batch_train, create_batch_val, make_X_lag_format, append_some_columns, prepare_past_ID_s_CARTESIAN
+from data_preprocess_utils import create_batch_train, create_batch_val, make_X_lag_format, append_some_columns, prepare_past_ID_s_CARTESIAN
 
 from gcloud_operations import upload_folder, upload_file, download_file, download_folder
 

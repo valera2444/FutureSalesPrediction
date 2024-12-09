@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
 from create_row_in_req_format import create_5_plus_match
-import os, boto3
+import os
 import pickle
 import numpy as np
 #import pandas as pd
@@ -12,7 +12,7 @@ import numpy as np
 from pathlib import Path
 
 
-from utils import select_columns_for_reading, prepare_data_validation_boosting, make_X_lag_format, append_some_columns
+from data_preprocess_utils import select_columns_for_reading, prepare_data_validation_boosting, make_X_lag_format, append_some_columns
 
 
 from fastapi import FastAPI

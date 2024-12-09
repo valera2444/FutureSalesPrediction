@@ -10,8 +10,6 @@ from sklearn.ensemble import RandomForestRegressor
 from lightgbm import LGBMRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Lasso
-from sklearn.linear_model import Ridge
-from sklearn.linear_model import LinearRegression
 
 import multiprocessing
 
@@ -20,7 +18,6 @@ import time
 import pickle
 
 
-import boto3
 import os
 
 import argparse
@@ -28,7 +25,7 @@ import argparse
 import mlflow
 #np.random.seed(42)
 
-from utils import create_batch_train, create_batch_val, make_X_lag_format, append_some_columns, prepare_past_ID_s_CARTESIAN
+from data_preprocess_utils import create_batch_train, create_batch_val, make_X_lag_format, append_some_columns, prepare_past_ID_s_CARTESIAN
 
 from gcloud_operations import upload_folder, upload_file, download_file, download_folder
 

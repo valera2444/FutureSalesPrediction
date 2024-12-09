@@ -1,8 +1,5 @@
 import pandas as pd
 import itertools
-import os
-import argparse
-import numpy as np
 
 def match(merged, row,new_row,  test_month, check):
     """Collects statistics per one batch for newcoming item based on collected data while preprocessing

@@ -8,13 +8,8 @@ FIRST_N_MONTH_TO_DROP = 6
 
 from pathlib import Path
 
-import click
-
 import argparse
 
-import mlflow
-
-import boto3
 import os
 
 from gcloud_operations import upload_folder, upload_file, download_file, download_folder
