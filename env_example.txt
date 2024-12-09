@@ -1,0 +1,15 @@
+AIRFLOW_UID=1000
+
+POSTGRES_USER=postgres_user
+POSTGRES_PASSWORD=postgres_password
+POSTGRES_DB=airflow
+
+MINIO_ACCESS_KEY=minio_user
+MINIO_ROOT_USER=minio_root_user
+MINIO_SECRET_ACCESS_KEY=minio_password
+
+AIRFLOW_USER=airflow_user
+AIRFLOW_PASSWORD=airflow_password
+
+BUCKET_NAME=predict-future-sales
+AIRFLOW_PROJ_DIR=./airflow
